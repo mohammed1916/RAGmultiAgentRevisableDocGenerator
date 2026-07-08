@@ -134,6 +134,116 @@ class ChatOrchestrator:
                 next_action="ask_more",
             )
 
+    def _user_asking_for_advice(self, answer: str) -> bool:
+        """Check if user is asking for advice/recommendations.
+
+        Args:
+            answer: User's answer
+
+        Returns:
+            True if user asking for help/advice
+        """
+        keywords = ["i don't know", "help", "advice", "recommend", "suggest",
+                   "what should", "which is best", "important", "critical", "essential"]
+        answer_lower = answer.lower()
+        return any(keyword in answer_lower for keyword in keywords)
+
+    def _recommend_topics(self, context: ChatContext) -> ChatResponse:
+        """Use LLM to recommend best topics for learning.
+
+        Args:
+            context: Chat context with subject and deadline
+
+        Returns:
+            ChatResponse with LLM-recommended topics
+        """
+        subject = context.answers.get("subject", "")
+        logger.info(f"LLM recommending topics for: {subject}")
+
+        try:
+            # Get all available topics from RAG
+            all_results = self.rag.search_documents(subject, top_k=20)
+            all_topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(all_results)]
+
+            if not all_topics:
+                response_text = f"I couldn't find topics for {subject}. Which ones would you like to study?"
+                context.conversation.append(
+                    ChatMessage(role="assistant", content=response_text)
+                )
+                return ChatResponse(
+                    message=response_text,
+                    questions=[ClarifyingQuestion(
+                        question="Topics to cover:",
+                        key="topics",
+                        options=None,
+                        required=True,
+                    )],
+                    context=context,
+                    is_ready_to_generate=False,
+                    next_action="ask_more",
+                )
+
+            # Use LLM to recommend which topics are most important
+            topics_str = "\n".join([f"- {t}" for t in all_topics[:15]])
+            prompt = f"""For a student preparing for '{subject}', recommend the TOP topics to focus on first.
+
+Available topics:
+{topics_str}
+
+Consider: foundational topics should come first, then build to advanced.
+Recommend the 5-8 most important topics to START with.
+
+Return ONLY the topic names, one per line, in order of importance."""
+
+            recommendation = self.llm_client.call_llm(prompt, max_tokens=200)
+            recommended_topics = [t.strip() for t in recommendation.strip().split("\n") if t.strip()]
+
+            response_text = f"Based on '{subject}', I recommend starting with these topics:\n\n" + "\n".join([f"• {t}" for t in recommended_topics[:8]])
+            context.conversation.append(
+                ChatMessage(role="assistant", content=response_text)
+            )
+            context.answers["topics"] = ", ".join(recommended_topics[:8])
+
+            logger.info(f"Recommended {len(recommended_topics)} topics")
+
+            # Now ask for deadline
+            response_text += "\n\nNow, what's your deadline?"
+            context.conversation.append(
+                ChatMessage(role="assistant", content=response_text)
+            )
+
+            return ChatResponse(
+                message=response_text,
+                questions=[ClarifyingQuestion(
+                    question="What's your deadline?",
+                    key="deadline",
+                    options=None,
+                    required=True,
+                )],
+                context=context,
+                is_ready_to_generate=False,
+                next_action="ask_more",
+            )
+
+        except Exception as e:
+            logger.error(f"Topic recommendation failed: {e}")
+            response_text = f"Let me help. Which topics from {subject} interest you most?"
+            context.conversation.append(
+                ChatMessage(role="assistant", content=response_text)
+            )
+            return ChatResponse(
+                message=response_text,
+                questions=[ClarifyingQuestion(
+                    question="Topics to cover:",
+                    key="topics",
+                    options=None,
+                    required=True,
+                )],
+                context=context,
+                is_ready_to_generate=False,
+                next_action="ask_more",
+            )
+
     def _generate_subjects_from_llm(self, request: str) -> List[str]:
         """Generate relevant subjects using LLM based on user request.
 
@@ -179,16 +289,18 @@ Options for this request:"""
         """
         logger.info(f"Processing answer for {question_key}: {answer[:50]}...")
 
-        # Store answer
-        context.answers[question_key] = answer
-
-        # Add to conversation
+        # Add to conversation FIRST (before any processing)
         context.conversation.append(
             ChatMessage(role="user", content=f"{answer}")
         )
 
-        # Topics are already fetched in start_conversation
-        # Just handle when user answers topics question
+        # Check if user is asking for advice/recommendations
+        if question_key == "topics" and self._user_asking_for_advice(answer):
+            logger.info(f"User asking for advice: {answer}")
+            return self._recommend_topics(context)
+
+        # Store answer normally
+        context.answers[question_key] = answer
 
         # Standard flow for other answers
         # Order: subject → topics → deadline → generate
