@@ -153,36 +153,40 @@ Generate conversational, helpful responses. Never force the user to choose betwe
         Returns:
             LLM-generated response
         """
-        # Build conversation history for LLM
-        messages_text = "\n".join([
-            f"{'User' if msg.role == 'user' else 'Assistant'}: {msg.content}"
+        # Build messages for chat API with system prompt
+        messages = [
+            {"role": "system", "content": self.SYSTEM_PROMPT},
+        ]
+
+        # Add conversation history
+        messages.extend([
+            {"role": msg.role, "content": msg.content}
             for msg in context.conversation[-10:]  # Last 10 messages for context
         ])
 
-        prompt = f"""{self.SYSTEM_PROMPT}
-
-CONVERSATION SO FAR:
-{messages_text}
-
-CURRENT CONTEXT LEARNED:
+        # Add context reminder as user message
+        context_msg = f"""Current learned context:
 - Subject: {context.answers.get('subject', 'Not yet mentioned')}
 - Topics: {context.answers.get('topics', 'Not yet mentioned')}
 - Deadline: {context.answers.get('deadline', 'Not yet mentioned')}
 
-Now generate the NEXT assistant response. You decide:
-1. What to say next
-2. Whether to fetch curriculum data (if so, mention what you found)
-3. Whether we have enough info to proceed
-4. If ready, include [READY] in your response
+Generate the NEXT assistant response now."""
 
-Generate a natural, helpful response that moves the conversation forward."""
+        messages.append({"role": "user", "content": context_msg})
 
         try:
-            response = self.llm_client.call_llm(prompt, max_tokens=300)
-            logger.info(f"LLM generated response: {response[:100]}...")
-            return response
+            result = self.llm_client.chat(messages)
+            response_text = result.get("message", {}).get("content", "").strip()
+
+            if not response_text:
+                logger.error("Empty response from LLM")
+                return "I had trouble processing that. Could you clarify what you're studying?"
+
+            logger.info(f"LLM generated response: {response_text[:100]}...")
+            return response_text
         except Exception as e:
             logger.error(f"LLM response failed: {e}")
+            logger.exception("Full error trace:")
             return f"I had trouble processing that. Could you clarify what you're studying?"
 
     def _extract_context_from_response(self, response: str, context: ChatContext) -> None:

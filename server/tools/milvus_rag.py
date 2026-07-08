@@ -4,9 +4,11 @@ Replaces document_fetcher and document_indexer with Milvus vector DB.
 """
 
 import json
+import socket
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import hashlib
+import threading
 
 try:
     from pymilvus import Collection, connections, utility, FieldSchema, CollectionSchema, DataType
@@ -47,7 +49,18 @@ class MilvusRAG:
             self.mock_mode = True
 
     def _connect(self):
-        """Connect to Milvus server."""
+        """Connect to Milvus server with timeout."""
+        # Quick check if server is reachable
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        try:
+            result = sock.connect_ex((self.host, self.port))
+            if result != 0:
+                raise ConnectionError(f"Cannot reach Milvus at {self.host}:{self.port}")
+        finally:
+            sock.close()
+
+        # Connect with pymilvus
         connections.connect(
             alias="default",
             host=self.host,
