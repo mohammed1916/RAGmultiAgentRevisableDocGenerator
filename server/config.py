@@ -19,7 +19,7 @@ class AppConfig:
 
     ollama: OllamaConfig = None
     max_review_iterations: int = 2
-    document_output_dir: str = "generated_documents"
+    document_output_dir: str = "output"
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
     def __post_init__(self):

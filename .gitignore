@@ -39,7 +39,8 @@ htmlcov/
 .tox/
 
 # Generated documents
-generated_documents/
+output/*.docx
+output/*.doc
 
 # Environment variables
 .env
