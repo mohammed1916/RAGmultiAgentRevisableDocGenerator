@@ -9,8 +9,9 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .models import DocumentRequest, DocumentResponse
+from .models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest
 from .orchestrator import Orchestrator
+from .chat_orchestrator import ChatOrchestrator
 from .exceptions import DocumentGenerationException
 from .logger import setup_logger
 
@@ -31,8 +32,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global orchestrator instance
+# Global orchestrator instances
 orchestrator = None
+chat_orchestrator = ChatOrchestrator()
+
+# Store chat sessions
+chat_sessions = {}
 
 # Mount static files (client UI)
 try:
@@ -171,6 +176,105 @@ async def download_file(filename: str):
     )
 
 
+@app.post("/chat/start")
+async def start_chat(request: DocumentRequest) -> ChatResponse:
+    """Start a new chat conversation for document generation.
+
+    Args:
+        request: Initial document request
+
+    Returns:
+        ChatResponse with initial questions
+    """
+    logger.info(f"Starting chat: {request.request[:100]}...")
+
+    try:
+        response = chat_orchestrator.start_conversation(request.request)
+
+        # Store session
+        import uuid
+        session_id = str(uuid.uuid4())
+        chat_sessions[session_id] = response.context
+
+        return response
+    except Exception as e:
+        logger.error(f"Chat start failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/answer")
+async def answer_question(
+    session_id: str,
+    question_key: str,
+    answer: str,
+) -> ChatResponse:
+    """Answer a clarifying question in the chat.
+
+    Args:
+        session_id: Chat session ID
+        question_key: Key of the question being answered
+        answer: User's answer
+
+    Returns:
+        ChatResponse with next action
+    """
+    logger.info(f"Processing chat answer: {question_key}={answer[:50]}")
+
+    if session_id not in chat_sessions:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    try:
+        context = chat_sessions[session_id]
+        response = chat_orchestrator.add_answer(context, question_key, answer)
+        chat_sessions[session_id] = response.context
+        return response
+    except Exception as e:
+        logger.error(f"Chat answer failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/chat/generate")
+async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
+    """Generate document from completed chat context.
+
+    Args:
+        req: Request with session ID and context
+
+    Returns:
+        Generated document response
+    """
+    logger.info(f"Generating document from chat: {req.session_id}")
+
+    if not req.context.is_ready_to_generate:
+        raise HTTPException(
+            status_code=400,
+            detail="Chat context not ready for generation. Answer all required questions first."
+        )
+
+    try:
+        # Build comprehensive prompt
+        prompt = chat_orchestrator.get_generation_prompt(req.context)
+
+        # Create document request with context
+        doc_request = DocumentRequest(
+            request=prompt,
+            metadata={
+                "session_id": req.session_id,
+                "audience": req.context.answers.get("audience"),
+                "scope": req.context.answers.get("scope"),
+                "tone": req.context.answers.get("tone"),
+            }
+        )
+
+        # Generate document
+        response = orchestrator.generate_document(doc_request)
+        logger.info(f"Document generated: {response.document_filename}")
+        return response
+    except Exception as e:
+        logger.error(f"Document generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -179,11 +283,19 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "POST /agent": "Generate document from natural language request",
+            "POST /chat/start": "Start chatbot conversation with clarifying questions",
+            "POST /chat/answer": "Answer a clarifying question in chat",
+            "POST /chat/generate": "Generate document after chat completion",
             "GET /health": "Health check",
             "GET /metrics": "Aggregated metrics",
             "GET /files": "List all generated documents",
             "GET /download/{filename}": "Download a document",
         },
+        "chat_workflow": {
+            "step1": "POST /chat/start - User sends initial request",
+            "step2": "POST /chat/answer - User answers clarifying questions (repeat as needed)",
+            "step3": "POST /chat/generate - Generate document when ready",
+        }
     }
 
 

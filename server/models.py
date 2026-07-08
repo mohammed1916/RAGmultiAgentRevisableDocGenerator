@@ -189,3 +189,49 @@ class StudyPlan(BaseModel):
     is_feasible: bool
     validation_issues: List[str] = Field(default_factory=list)
     confidence_score: float = Field(0.0, ge=0.0, le=1.0)
+
+
+# Chat Models
+
+class ChatMessage(BaseModel):
+    """A single message in the chat conversation."""
+
+    role: str  # "user", "assistant", or "system"
+    content: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class ClarifyingQuestion(BaseModel):
+    """A clarifying question for the user."""
+
+    question: str
+    key: str  # e.g., "audience", "scope", "tone"
+    options: Optional[List[str]] = None  # Multiple choice options
+    required: bool = True
+
+
+class ChatContext(BaseModel):
+    """Context accumulated during chat conversation."""
+
+    initial_request: str
+    conversation: List[ChatMessage] = Field(default_factory=list)
+    answers: Dict[str, str] = Field(default_factory=dict)  # question_key -> answer
+    is_ready_to_generate: bool = False
+    confidence_level: float = 0.0  # How confident we are to generate
+
+
+class ChatResponse(BaseModel):
+    """Response from chat endpoint."""
+
+    message: str
+    questions: Optional[List[ClarifyingQuestion]] = None
+    context: ChatContext
+    is_ready_to_generate: bool
+    next_action: str  # "ask_more", "ready_to_generate", "generate_now"
+
+
+class GenerateFromChatRequest(BaseModel):
+    """Request to generate document from chat context."""
+
+    session_id: str
+    context: ChatContext
