@@ -10,6 +10,7 @@ from docx.shared import Inches, Pt, RGBColor
 from ..exceptions import DOCXGenerationException
 from ..logger import setup_logger
 from ..models import DocumentSection, DocumentStructure
+from .markdown_formatter import MarkdownFormatter
 
 logger = setup_logger(__name__)
 
@@ -68,35 +69,48 @@ class DOCXGenerator:
         logger.debug(f"Added heading (level {level}): {text}")
 
     def add_paragraph(self, text: str, bold: bool = False, italic: bool = False) -> None:
-        """Add a paragraph.
+        """Add a paragraph with optional markdown formatting.
+
+        Supports: **bold**, *italic*, ***bold+italic***
 
         Args:
-            text: Paragraph text
-            bold: Whether text should be bold
-            italic: Whether text should be italic
+            text: Paragraph text (may contain markdown formatting)
+            bold: Whether entire text should be bold (overrides markdown)
+            italic: Whether entire text should be italic (overrides markdown)
         """
         if not self.doc:
             raise DOCXGenerationException("Document not initialized.")
 
-        para = self.doc.add_paragraph(text)
-        if bold or italic:
-            for run in para.runs:
-                run.font.bold = bold
-                run.font.italic = italic
+        para = self.doc.add_paragraph()
+
+        # Apply markdown formatting
+        segments = MarkdownFormatter.simple_parse(text)
+        for segment_text, formatting in segments:
+            run = para.add_run(segment_text)
+            run.font.bold = bold or formatting.get("bold", False)
+            run.font.italic = italic or formatting.get("italic", False)
 
         logger.debug(f"Added paragraph ({len(text)} chars)")
 
     def add_bullet_list(self, items: List[str]) -> None:
-        """Add a bulleted list.
+        """Add a bulleted list with markdown formatting support.
+
+        Supports markdown: **bold**, *italic*, ***bold+italic***
 
         Args:
-            items: List of bullet items
+            items: List of bullet items (may contain markdown formatting)
         """
         if not self.doc:
             raise DOCXGenerationException("Document not initialized.")
 
         for item in items:
-            self.doc.add_paragraph(item, style="List Bullet")
+            para = self.doc.add_paragraph(style="List Bullet")
+            # Apply markdown formatting to bullet items
+            segments = MarkdownFormatter.simple_parse(item)
+            for segment_text, formatting in segments:
+                run = para.add_run(segment_text)
+                run.font.bold = formatting.get("bold", False)
+                run.font.italic = formatting.get("italic", False)
 
         logger.debug(f"Added bullet list with {len(items)} items")
 

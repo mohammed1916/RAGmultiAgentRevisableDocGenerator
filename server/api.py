@@ -1,6 +1,11 @@
 """FastAPI server for document generation."""
 
+import os
+from pathlib import Path
+from datetime import datetime
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from .models import DocumentRequest, DocumentResponse
@@ -94,6 +99,67 @@ async def get_metrics():
     }
 
 
+@app.get("/files")
+async def list_output_files():
+    """List all generated documents in output/ folder.
+
+    Returns:
+        List of files with metadata (name, size, created date)
+    """
+    output_dir = Path("output")
+
+    if not output_dir.exists():
+        return {"files": [], "message": "Output directory not found"}
+
+    files = []
+    for filepath in sorted(output_dir.glob("*.docx"), key=os.path.getmtime, reverse=True):
+        stat = filepath.stat()
+        files.append({
+            "filename": filepath.name,
+            "size_bytes": stat.st_size,
+            "size_mb": round(stat.st_size / (1024 * 1024), 2),
+            "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "download_url": f"/download/{filepath.name}",
+        })
+
+    logger.info(f"Listed {len(files)} files in output directory")
+    return {
+        "files": files,
+        "total": len(files),
+        "output_directory": str(output_dir.absolute()),
+    }
+
+
+@app.get("/download/{filename}")
+async def download_file(filename: str):
+    """Download a generated document.
+
+    Args:
+        filename: Name of the file to download
+
+    Returns:
+        File response for download
+    """
+    # Security: prevent directory traversal
+    if "/" in filename or "\\" in filename or filename.startswith("."):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    filepath = Path("output") / filename
+
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+    if not filepath.suffix == ".docx":
+        raise HTTPException(status_code=400, detail="Only .docx files can be downloaded")
+
+    logger.info(f"Downloading file: {filename}")
+    return FileResponse(
+        filepath,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=filename,
+    )
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -104,6 +170,8 @@ async def root():
             "POST /agent": "Generate document from natural language request",
             "GET /health": "Health check",
             "GET /metrics": "Aggregated metrics",
+            "GET /files": "List all generated documents",
+            "GET /download/{filename}": "Download a document",
         },
     }
 
