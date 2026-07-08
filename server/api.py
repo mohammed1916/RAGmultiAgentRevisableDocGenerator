@@ -3,10 +3,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import DocumentRequest, DocumentResponse
-from orchestrator import Orchestrator
-from exceptions import DocumentGenerationException
-from logger import setup_logger
+from .models import DocumentRequest, DocumentResponse
+from .orchestrator import Orchestrator
+from .exceptions import DocumentGenerationException
+from .logger import setup_logger
 
 logger = setup_logger(__name__)
 

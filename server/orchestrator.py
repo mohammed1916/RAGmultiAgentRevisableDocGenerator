@@ -5,13 +5,13 @@ import os
 from datetime import datetime
 from typing import Tuple
 
-from agents.planner import PlannerAgent
-from agents.writer import WriterAgent
-from agents.reviewer import ReviewerAgent
-from tools.ollama_client import OllamaClient
-from tools.docx_generator import DOCXGenerator
-from tools.metrics import MetricsCollector
-from models import (
+from .agents.planner import PlannerAgent
+from .agents.writer import WriterAgent
+from .agents.reviewer import ReviewerAgent
+from .tools.ollama_client import OllamaClient
+from .tools.docx_generator import DOCXGenerator
+from .tools.metrics import MetricsCollector
+from .models import (
     DocumentRequest,
     DocumentResponse,
     ExecutionPlan,
@@ -19,9 +19,9 @@ from models import (
     DocumentSection,
     ReviewFeedback,
 )
-from exceptions import DocumentGenerationException
-from logger import setup_logger
-from config import config
+from .exceptions import DocumentGenerationException
+from .logger import setup_logger
+from .config import config
 
 logger = setup_logger(__name__)
 
