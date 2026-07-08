@@ -45,6 +45,14 @@ class DocumentStructure(BaseModel):
     sections: List[DocumentSection]
 
 
+class SectionFeedback(BaseModel):
+    """Feedback for a specific section."""
+
+    section_title: str
+    issues: List[str] = Field(default_factory=list)
+    feedback: str
+
+
 class ReviewFeedback(BaseModel):
     """Review feedback from the Reviewer Agent."""
 
@@ -53,6 +61,7 @@ class ReviewFeedback(BaseModel):
     consistency_issues: List[str] = Field(default_factory=list)
     structure_issues: List[str] = Field(default_factory=list)
     tone_issues: List[str] = Field(default_factory=list)
+    section_feedback: List[SectionFeedback] = Field(default_factory=list)
     corrections: str = ""
 
 

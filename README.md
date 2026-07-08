@@ -130,6 +130,159 @@ User Request
    (doc + metrics)
 ```
 
+---
+
+## Core Engineering Improvement: Iterative Refinement with Feedback Loops
+
+### What Problem Does It Solve?
+
+Autonomous LLM-based systems often produce content with quality issues when written in a single pass:
+
+**Issues without iterative refinement:**
+- **Inconsistent terminology** across sections ("API endpoint" in section 2, "web service" in section 4)
+- **Logical flow problems** (conclusions contradict earlier statements)
+- **Grammar & style inconsistencies** (section 1 is formal, section 3 is casual)
+- **Incomplete coverage** (section 1 mentions a concept but section 2 doesn't explain it)
+- **Tone misalignment** (technical sections mixed with marketing language)
+
+**Real example:**
+- Planner outlines a technical specification with 5 sections
+- Writer produces all sections
+- Review discovers: "Implementation Strategy" calls it "API Gateway" but "Architecture" calls it "Service Mesh"
+- **Without refinement:** Document ships with inconsistency
+- **With refinement:** The problematic section gets rewritten to fix this specific issue
+
+### How It's Implemented
+
+#### 1. **Enhanced Reviewer Agent** — Section-Specific Feedback Detection
+
+Instead of generic quality flags, the Reviewer now identifies exactly which sections have issues and why:
+
+```python
+# BEFORE: Generic, non-actionable feedback
+{
+    "has_issues": True,
+    "corrections": "Fix consistency issues"
+}
+
+# AFTER: Specific, section-targeted feedback
+{
+    "has_issues": True,
+    "section_feedback": [
+        {
+            "section_title": "Technical Architecture",
+            "issues": ["Inconsistent service naming", "Missing security details"],
+            "feedback": "Clarify that 'API Gateway' is the single entry point. 
+                         Update all references. Reference threat model from Section 5."
+        },
+        {
+            "section_title": "Deployment Strategy",
+            "issues": ["Vague deployment timeline"],
+            "feedback": "Align timeline with sprint milestones mentioned in Project Timeline."
+        }
+    ]
+}
+```
+
+#### 2. **Writer Agent Revision Mode** — Targeted Section Rewrites
+
+Writer now accepts revision feedback and **rewrites only the affected section** with that feedback in mind:
+
+```python
+# During refinement:
+revision_feedback = """
+Clarify that 'API Gateway' is the single entry point for all requests.
+Ensure all subsequent references use this terminology.
+Reference the threat model from Section 5 for security considerations.
+"""
+
+revised_section = writer.write_section(
+    request,
+    plan,
+    section_index=1,
+    previous_sections=sections[:1],
+    revision_feedback=revision_feedback  # ← NEW: Targeted feedback
+)
+```
+
+#### 3. **Orchestrator Refinement Loop** — Iterative Quality Improvement
+
+The orchestrator now actually applies fixes instead of just logging issues:
+
+```python
+# Review Iteration Loop
+for iteration in range(1, max_iterations + 1):
+    feedback = reviewer.review_document(doc_type, sections)
+    
+    if not feedback.has_issues:
+        logger.info("Quality check passed - no issues found ✓")
+        break
+    else:
+        # IMPROVEMENT: Actually fix the issues (not just log them)
+        sections = orchestrator._refine_sections(
+            request, plan, sections, feedback
+        )
+        logger.info(f"Refined {len(feedback.section_feedback)} sections ✓")
+        # Loop continues, re-review the refined document
+```
+
+### Example Walk-Through
+
+**Scenario:** Project Proposal document generation
+
+**Iteration 1 - Initial Write & Review:**
+- Writer produces all 6 sections
+- Reviewer checks and finds issues in 2 sections:
+  - Section "Budget": Says "estimated at $50K" 
+  - Section "ROI Analysis": Says "based on $75K investment"
+  - Issue: Budget amount is inconsistent
+
+**Review Output:**
+```
+Section "Budget" - Issue: Budget figure inconsistency
+  Feedback: Update budget to $75K to match ROI Analysis section which 
+            references quarterly breakdowns. Ensure all cost-benefit 
+            calculations align.
+```
+
+**Iteration 2 - Refinement:**
+- Writer **only rewrites** "Budget" section with specific feedback
+- New version: "Estimated investment: $75K, broken down as..."
+- Reviewer runs again - now passes ✓
+
+**Result:**
+- Document is internally consistent
+- No manual human intervention needed
+- Process took 2 automated refinement cycles
+
+### Why This Engineering Improvement Matters
+
+1. **Autonomous Problem Solving** - Agent catches and fixes its own inconsistencies
+2. **Precise Corrections** - Feedback targets specific issues, not vague "improve writing"
+3. **Efficiency** - Only problematic sections rewritten; rest unchanged
+4. **Explainability** - Each fix logged with the specific issue and solution
+5. **Safety** - Max 2 iterations prevents runaway loops while allowing recovery
+6. **Measurable Quality** - Quality scores improve across iterations
+
+### Metrics & Observability
+
+```json
+{
+  "review_iterations": 2,
+  "sections_refined": 2,
+  "quality_scores": {
+    "iteration_1": { "overall": 3.8, "consistency": 3 },
+    "iteration_2": { "overall": 4.8, "consistency": 5 }
+  },
+  "refinement_changes": {
+    "Budget": "Updated cost figure to match ROI section",
+    "Timeline": "Aligned sprint milestones with budget phases"
+  }
+}
+```
+
+---
+
 ## Component Details
 
 ### 1. Planner Agent

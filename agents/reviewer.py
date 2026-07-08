@@ -4,7 +4,7 @@ import json
 from typing import List
 
 from tools.ollama_client import OllamaClient
-from models import DocumentSection, ReviewFeedback, QualityScore
+from models import DocumentSection, ReviewFeedback, QualityScore, SectionFeedback
 from exceptions import ReviewerException
 from logger import setup_logger
 
@@ -25,22 +25,22 @@ class ReviewerAgent:
     def review_document(
         self, title: str, sections: List[DocumentSection]
     ) -> ReviewFeedback:
-        """Review a document for quality issues.
+        """Review a document for quality issues and identify specific sections needing fixes.
 
         Args:
             title: Document title
             sections: List of document sections
 
         Returns:
-            ReviewFeedback instance
+            ReviewFeedback instance with section-specific issues
 
         Raises:
             ReviewerException: If review fails
         """
-        logger.info("Starting document review")
+        logger.info("Starting document review with section-specific feedback")
 
         document_text = self._format_document(title, sections)
-        prompt = self._build_review_prompt(document_text)
+        prompt = self._build_review_prompt(document_text, sections)
 
         try:
             response = self.client.structured_generate(
@@ -65,6 +65,18 @@ class ReviewerAgent:
                             "type": "array",
                             "items": {"type": "string"},
                         },
+                        "section_feedback": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "section_title": {"type": "string"},
+                                    "issues": {"type": "array", "items": {"type": "string"}},
+                                    "feedback": {"type": "string"},
+                                },
+                                "required": ["section_title", "issues", "feedback"],
+                            },
+                        },
                         "corrections": {"type": "string"},
                     },
                     "required": ["has_issues", "corrections"],
@@ -73,17 +85,29 @@ class ReviewerAgent:
 
             parsed = response.get("parsed_response", {})
 
+            section_feedbacks = [
+                SectionFeedback(
+                    section_title=sf.get("section_title", "Unknown"),
+                    issues=sf.get("issues", []),
+                    feedback=sf.get("feedback", ""),
+                )
+                for sf in parsed.get("section_feedback", [])
+            ]
+
             feedback = ReviewFeedback(
                 has_issues=parsed.get("has_issues", False),
                 grammar_issues=parsed.get("grammar_issues", []),
                 consistency_issues=parsed.get("consistency_issues", []),
                 structure_issues=parsed.get("structure_issues", []),
                 tone_issues=parsed.get("tone_issues", []),
+                section_feedback=section_feedbacks,
                 corrections=parsed.get("corrections", ""),
             )
 
             if feedback.has_issues:
-                logger.warning(f"Review found issues: {feedback}")
+                logger.warning(f"Review found {len(section_feedbacks)} sections with issues")
+                for sf in section_feedbacks:
+                    logger.warning(f"  - {sf.section_title}: {sf.feedback[:100]}...")
             else:
                 logger.info("Review passed - no issues found")
 
@@ -142,33 +166,48 @@ class ReviewerAgent:
         except Exception as e:
             raise ReviewerException(f"Failed to score document: {str(e)}")
 
-    def _build_review_prompt(self, document_text: str) -> str:
-        """Build the review prompt.
+    def _build_review_prompt(self, document_text: str, sections: List[DocumentSection] = None) -> str:
+        """Build the review prompt with section-specific feedback.
 
         Args:
             document_text: Complete document text
+            sections: List of document sections (for targeted review)
 
         Returns:
             Formatted prompt
         """
+        section_list = ""
+        if sections:
+            section_list = "\n\nSections to review:\n"
+            for i, section in enumerate(sections, 1):
+                section_list += f"{i}. {section.title}\n"
+
         return f"""You are an expert document reviewer. Review this document for quality issues.
 
 Document:
 {document_text}
+{section_list}
 
 Perform a thorough review checking for:
 1. Grammar and spelling errors
-2. Consistency (terminology, style, formatting)
+2. Consistency (terminology, style, formatting across sections)
 3. Structure and logical flow
-4. Professional tone
+4. Professional tone alignment
+5. Alignment with document purpose
+
+For each section that has issues, provide specific feedback on what needs to be fixed.
 
 Return JSON with:
 - has_issues: boolean indicating if any issues were found
-- grammar_issues: list of grammar/spelling problems
-- consistency_issues: list of consistency problems
-- structure_issues: list of structural problems
-- tone_issues: list of tone problems
-- corrections: text describing recommended corrections"""
+- grammar_issues: list of grammar/spelling problems (general)
+- consistency_issues: list of consistency problems across sections
+- structure_issues: list of structural or flow problems
+- tone_issues: list of tone inconsistencies
+- section_feedback: array of objects, each with:
+  * section_title: name of the section
+  * issues: array of specific issues found in that section
+  * feedback: detailed description of what to fix in this section
+- corrections: text describing all recommended corrections"""
 
     def _build_scoring_prompt(self, document_text: str) -> str:
         """Build the scoring prompt.

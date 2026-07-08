@@ -151,6 +151,7 @@ class TestReviewerAgent:
                 "consistency_issues": [],
                 "structure_issues": [],
                 "tone_issues": [],
+                "section_feedback": [],
                 "corrections": "Document looks good",
             },
         }
@@ -179,6 +180,13 @@ class TestReviewerAgent:
                 "consistency_issues": ["Inconsistent terminology"],
                 "structure_issues": [],
                 "tone_issues": [],
+                "section_feedback": [
+                    {
+                        "section_title": "Introduction",
+                        "issues": ["Spelling error"],
+                        "feedback": "Fix the spelling of 'Introducton' to 'Introduction'"
+                    }
+                ],
                 "corrections": "Fix spelling and terminology",
             },
         }
@@ -197,6 +205,7 @@ class TestReviewerAgent:
 
         assert feedback.has_issues is True
         assert len(feedback.grammar_issues) > 0
+        assert len(feedback.section_feedback) > 0
 
     def test_score_document_success(self):
         """Test successful document scoring."""

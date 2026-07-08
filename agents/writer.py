@@ -28,6 +28,7 @@ class WriterAgent:
         plan: ExecutionPlan,
         section_index: int,
         previous_sections: List[DocumentSection] = None,
+        revision_feedback: Optional[str] = None,
     ) -> DocumentSection:
         """Write a single section of the document.
 
@@ -36,6 +37,7 @@ class WriterAgent:
             plan: ExecutionPlan instance
             section_index: Index of section to write (into plan.outline)
             previous_sections: List of previously written sections
+            revision_feedback: Feedback from reviewer for revision (if rewriting)
 
         Returns:
             DocumentSection instance
@@ -47,10 +49,14 @@ class WriterAgent:
             raise WriterException(f"Section index {section_index} out of bounds")
 
         section_title = plan.outline[section_index]
-        logger.info(f"Writing section: {section_title}")
+
+        if revision_feedback:
+            logger.info(f"Revising section: {section_title} based on feedback")
+        else:
+            logger.info(f"Writing section: {section_title}")
 
         prompt = self._build_writing_prompt(
-            request, plan, section_title, previous_sections
+            request, plan, section_title, previous_sections, revision_feedback
         )
 
         try:
@@ -75,7 +81,10 @@ class WriterAgent:
                 heading_level=parsed.get("heading_level", 2),
             )
 
-            logger.info(f"Section written: {section.title} ({len(section.content)} chars)")
+            if revision_feedback:
+                logger.info(f"Section revised: {section.title} ({len(section.content)} chars)")
+            else:
+                logger.info(f"Section written: {section.title} ({len(section.content)} chars)")
             return section
         except Exception as e:
             raise WriterException(f"Failed to write section: {str(e)}")
@@ -114,6 +123,7 @@ class WriterAgent:
         plan: ExecutionPlan,
         section_title: str,
         previous_sections: Optional[List[DocumentSection]] = None,
+        revision_feedback: Optional[str] = None,
     ) -> str:
         """Build the writing prompt for a section.
 
@@ -122,11 +132,31 @@ class WriterAgent:
             plan: ExecutionPlan instance
             section_title: Title of the section to write
             previous_sections: Previously written sections
+            revision_feedback: Specific feedback from reviewer to address
 
         Returns:
             Formatted prompt
         """
-        prompt = f"""You are an expert technical writer. Write one section of a professional document.
+        if revision_feedback:
+            prompt = f"""You are an expert technical writer revising a document section based on reviewer feedback.
+
+Original Request: {request}
+Document Type: {plan.document_type}
+
+Section to Revise: {section_title}
+
+REVIEWER FEEDBACK (address these specific issues):
+{revision_feedback}
+
+Rewrite this section incorporating all feedback. Focus on:
+- Fixing the specific issues mentioned above
+- Maintaining consistency with the document context
+- Keeping professional tone
+- Ensuring clarity and completeness
+
+"""
+        else:
+            prompt = f"""You are an expert technical writer. Write one section of a professional document.
 
 Original Request: {request}
 
@@ -144,19 +174,18 @@ Write this section in a professional, clear manner. The content should be:
 - Substantive and detailed
 - Professional in tone
 - Consistent with the overall document context
-- {len(section_title)} words minimum
 
 """
 
         if previous_sections:
-            prompt += "\nPreviously written sections:\n"
+            prompt += "\nPreviously written sections for context:\n"
             for prev in previous_sections:
                 prompt += f"- {prev.title}: {prev.content[:200]}...\n"
 
         prompt += """
 Return the section as JSON with:
 - title: The section title
-- content: The section content (1-2 paragraphs, professional tone)
+- content: The section content (substantive and well-written)
 - heading_level: 2 for main sections, 3 for subsections"""
 
         return prompt

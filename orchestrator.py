@@ -17,6 +17,7 @@ from models import (
     ExecutionPlan,
     DocumentStructure,
     DocumentSection,
+    ReviewFeedback,
 )
 from exceptions import DocumentGenerationException
 from logger import setup_logger
@@ -68,9 +69,9 @@ class Orchestrator:
             write_latency = (time.time() - write_start) * 1000
             self.metrics.record_writer_execution(write_latency)
 
-            # Step 3: Review
+            # Step 3: Review with Iterative Refinement
             logger.info("=" * 50)
-            logger.info("PHASE 3: Review & Quality Check")
+            logger.info("PHASE 3: Review & Iterative Refinement")
             logger.info("=" * 50)
             review_start = time.time()
             review_iterations = 0
@@ -80,15 +81,23 @@ class Orchestrator:
                 feedback = self.reviewer.review_document(plan.document_type, sections)
 
                 if not feedback.has_issues:
-                    logger.info("Review passed - no issues found")
+                    logger.info("Review passed - no issues found ✓")
                     break
                 else:
-                    logger.warning(f"Issues found: {feedback.corrections[:200]}...")
+                    logger.warning(f"Issues found - refining document...")
                     review_iterations = iteration
 
-                if iteration < config.max_review_iterations:
-                    # Attempt to fix issues (in real implementation, would call writer again)
-                    logger.info("Attempting to fix issues...")
+                    if iteration < config.max_review_iterations:
+                        # Iterative refinement: Fix specific sections based on feedback
+                        logger.info(f"Fixing {len(feedback.section_feedback)} sections with issues...")
+                        sections = self._refine_sections(
+                            doc_request.request, plan, sections, feedback
+                        )
+                    else:
+                        logger.warning(
+                            f"Max review iterations ({config.max_review_iterations}) reached. "
+                            "Proceeding with current document."
+                        )
 
             review_latency = (time.time() - review_start) * 1000
             self.metrics.record_reviewer_execution(review_latency, review_iterations)
@@ -148,3 +157,57 @@ class Orchestrator:
         except Exception as e:
             logger.error(f"Unexpected error: {str(e)}")
             raise DocumentGenerationException(f"Unexpected error: {str(e)}")
+
+    def _refine_sections(
+        self,
+        request: str,
+        plan: ExecutionPlan,
+        sections: list[DocumentSection],
+        feedback: ReviewFeedback,
+    ) -> list[DocumentSection]:
+        """Refine sections based on reviewer feedback via iterative rewriting.
+
+        This implements the core engineering improvement: Iterative Refinement.
+        Sections with identified issues are rewritten by the Writer Agent,
+        with specific feedback from the Reviewer about what needs fixing.
+
+        Args:
+            request: Original user request
+            plan: ExecutionPlan instance
+            sections: Current document sections
+            feedback: ReviewFeedback with section-specific issues
+
+        Returns:
+            Updated list of DocumentSection instances with refinements applied
+        """
+        logger.info("ITERATIVE REFINEMENT: Rewriting sections based on feedback")
+
+        refined_sections = list(sections)  # Copy current sections
+
+        # Map section titles to indices for efficient lookup
+        section_index_map = {section.title: idx for idx, section in enumerate(sections)}
+
+        for section_fb in feedback.section_feedback:
+            section_title = section_fb.section_title
+            if section_title not in section_index_map:
+                logger.warning(f"Section '{section_title}' not found in document. Skipping.")
+                continue
+
+            section_idx = section_index_map[section_title]
+            logger.info(f"Refining section [{section_idx + 1}/{len(sections)}]: {section_title}")
+            logger.info(f"  Issues: {', '.join(section_fb.issues[:2])}...")
+            logger.info(f"  Feedback: {section_fb.feedback[:150]}...")
+
+            # Use Writer to rewrite the section with specific feedback
+            revised_section = self.writer.write_section(
+                request,
+                plan,
+                section_idx,
+                previous_sections=refined_sections[:section_idx],
+                revision_feedback=section_fb.feedback,
+            )
+
+            refined_sections[section_idx] = revised_section
+            logger.info(f"  ✓ Section refined ({len(revised_section.content)} chars)")
+
+        return refined_sections
