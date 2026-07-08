@@ -136,19 +136,48 @@ class ChatOrchestrator:
                 next_action="ask_more",
             )
 
-    def _user_asking_for_advice(self, answer: str) -> bool:
-        """Check if user is asking for advice/recommendations.
+    def _llm_analyze_if_user_knows(self, user_answer: str, subject: str) -> bool:
+        """LLM analyzes if user actually knows which topics they want.
 
         Args:
-            answer: User's answer
+            user_answer: User's response about topics
+            subject: The subject/curriculum they're studying
 
         Returns:
-            True if user asking for help/advice
+            True if user clearly knows which topics, False if vague/unsure
         """
-        keywords = ["i don't know", "help", "advice", "recommend", "suggest",
-                   "what should", "which is best", "important", "critical", "essential"]
-        answer_lower = answer.lower()
-        return any(keyword in answer_lower for keyword in keywords)
+        prompt = f"""Analyze this student's response about which topics they want to study.
+
+Subject: {subject}
+Student's response: "{user_answer}"
+
+Question: Does the student clearly know SPECIFIC topics they want to learn?
+
+Criteria for YES (user knows):
+- Mentions specific topic names (e.g., "Kinematics and Waves")
+- References specific concepts
+- Clear boundaries (e.g., "chapters 1-5")
+
+Criteria for NO (user unsure):
+- Vague answers like "I don't know", "everything", "all", "all of them"
+- Generic answers like "advice me", "recommend", "help me choose"
+- Uncertain language: "maybe", "I guess", "not sure"
+- Asks you to decide: "you choose", "pick for me", "what do you think"
+
+Answer with ONLY: "YES" or "NO"
+"""
+
+        try:
+            response = self.llm_client.call_llm(prompt, max_tokens=10)
+            knows = "YES" in response.upper()
+            logger.info(f"LLM analysis: user knows={knows}")
+            return knows
+        except Exception as e:
+            logger.error(f"LLM analysis failed: {e}")
+            # If analysis fails, check for obvious keywords
+            vague_keywords = ["don't know", "i don't", "everything", "all of them",
+                            "help", "advise", "recommend", "you choose"]
+            return not any(kw in user_answer.lower() for kw in vague_keywords)
 
     def _recommend_topics(self, context: ChatContext) -> ChatResponse:
         """Use LLM to recommend best topics for learning.
@@ -296,10 +325,15 @@ Options for this request:"""
             ChatMessage(role="user", content=f"{answer}")
         )
 
-        # Check if user is asking for advice/recommendations
-        if question_key == "topics" and self._user_asking_for_advice(answer):
-            logger.info(f"User asking for advice: {answer}")
-            return self._recommend_topics(context)
+        # If user answering topics question, LLM analyzes if they know what they want
+        if question_key == "topics":
+            knows_topics = self._llm_analyze_if_user_knows(answer, context.answers.get("subject", ""))
+            logger.info(f"User knows topics: {knows_topics}, answer: {answer}")
+
+            if not knows_topics:
+                # User doesn't know topics - LLM autonomously recommends
+                logger.info("LLM determined user needs recommendations")
+                return self._recommend_topics(context)
 
         # Store answer normally
         context.answers[question_key] = answer
