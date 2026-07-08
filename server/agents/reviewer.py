@@ -3,10 +3,10 @@
 import json
 from typing import List
 
-from tools.ollama_client import OllamaClient
-from models import DocumentSection, ReviewFeedback, QualityScore, SectionFeedback
-from exceptions import ReviewerException
-from logger import setup_logger
+from ..tools.ollama_client import OllamaClient
+from ..models import DocumentSection, ReviewFeedback, QualityScore, SectionFeedback
+from ..exceptions import ReviewerException
+from ..logger import setup_logger
 
 logger = setup_logger(__name__)
 

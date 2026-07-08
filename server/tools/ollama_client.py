@@ -6,9 +6,9 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from config import config
-from exceptions import OllamaConnectionException, OllamaException
-from logger import setup_logger
+from ..config import config
+from ..exceptions import OllamaConnectionException, OllamaException
+from ..logger import setup_logger
 
 logger = setup_logger(__name__)
 

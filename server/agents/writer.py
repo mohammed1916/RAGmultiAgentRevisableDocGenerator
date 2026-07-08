@@ -3,10 +3,10 @@
 import json
 from typing import Dict, List, Optional
 
-from tools.ollama_client import OllamaClient
-from models import DocumentSection, ExecutionPlan
-from exceptions import WriterException
-from logger import setup_logger
+from ..tools.ollama_client import OllamaClient
+from ..models import DocumentSection, ExecutionPlan
+from ..exceptions import WriterException
+from ..logger import setup_logger
 
 logger = setup_logger(__name__)
 

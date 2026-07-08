@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from config import config
+from .config import config
 
 
 def setup_logger(name: str) -> logging.Logger:

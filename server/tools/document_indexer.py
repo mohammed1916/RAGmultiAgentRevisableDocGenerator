@@ -7,7 +7,7 @@ import json
 import numpy as np
 from typing import List, Dict, Any, Tuple
 from pathlib import Path
-from logger import setup_logger
+from ..logger import setup_logger
 
 logger = setup_logger(__name__)
 

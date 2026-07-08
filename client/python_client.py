@@ -2,7 +2,11 @@
 
 import requests
 from typing import Optional, Dict, Any
-from models import DocumentResponse
+
+try:
+    from server.models import DocumentResponse
+except ImportError:
+    DocumentResponse = None
 
 
 class DocumentGenerationClient:

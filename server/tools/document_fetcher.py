@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import requests
-from logger import setup_logger
+from ..logger import setup_logger
 
 logger = setup_logger(__name__)
 
