@@ -108,7 +108,7 @@ async function startChat(initialRequest) {
         addChatMessage('assistant', data.message);
 
         currentChatContext = data.context;
-        currentSessionId = 'session_' + Date.now();
+        currentSessionId = data.session_id;  // Use session_id from server
 
         updateProgress(data.context.confidence_level);
         progressSection.style.display = 'block';

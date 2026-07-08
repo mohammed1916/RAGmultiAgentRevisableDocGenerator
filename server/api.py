@@ -241,18 +241,20 @@ async def start_chat(request: DocumentRequest) -> ChatResponse:
         request: Initial document request
 
     Returns:
-        ChatResponse with initial questions
+        ChatResponse with initial questions and session_id
     """
     logger.info(f"Starting chat: {request.request[:100]}...")
 
     try:
         response = chat_orchestrator.start_conversation(request.request)
 
-        # Store session
+        # Store session with UUID
         import uuid
         session_id = str(uuid.uuid4())
         chat_sessions[session_id] = response.context
 
+        # Add session_id to response
+        response.session_id = session_id
         return response
     except Exception as e:
         logger.error(f"Chat start failed: {str(e)}")
@@ -284,6 +286,7 @@ async def answer_question(
         context = chat_sessions[session_id]
         response = chat_orchestrator.add_answer(context, question_key, answer)
         chat_sessions[session_id] = response.context
+        response.session_id = session_id
         return response
     except Exception as e:
         logger.error(f"Chat answer failed: {str(e)}")

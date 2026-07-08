@@ -224,6 +224,7 @@ class ChatResponse(BaseModel):
     """Response from chat endpoint."""
 
     message: str
+    session_id: str
     questions: Optional[List[ClarifyingQuestion]] = None
     context: ChatContext
     is_ready_to_generate: bool
