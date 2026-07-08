@@ -4,9 +4,9 @@ Wraps existing Planner, Writer, and Reviewer agents as LangChain tools.
 """
 
 from typing import Optional
-from langchain.tools import tool
+from langchain_core.tools import tool
 from langchain_community.llms import Ollama
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from .logger import setup_logger
@@ -265,7 +265,7 @@ Always provide structured, hierarchical plans."""),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_tool_calling_agent(llm, tools, prompt)
+    agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
@@ -286,7 +286,7 @@ Fetch RAG context when you need curriculum or reference material."""),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_tool_calling_agent(llm, tools, prompt)
+    agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 
@@ -307,5 +307,5 @@ Focus on: relevance, completeness, coherence, structure."""),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
 
-    agent = create_tool_calling_agent(llm, tools, prompt)
+    agent = create_openai_tools_agent(llm, tools, prompt)
     return AgentExecutor(agent=agent, tools=tools, verbose=True)

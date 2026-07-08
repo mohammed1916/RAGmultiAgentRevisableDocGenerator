@@ -56,7 +56,7 @@ async def test_plan_node_execution(mocker):
 
     # Mock LLM and agent
     mocker.patch('server.langgraph_orchestrator.Ollama')
-    mocker.patch('server.langgraph_orchestrator.create_tool_calling_agent')
+    mocker.patch('server.langgraph_orchestrator.create_openai_tools_agent')
     mocker.patch('server.langgraph_orchestrator.AgentExecutor')
 
     state: DocumentGenerationState = {
@@ -184,7 +184,7 @@ async def test_review_conditional_routing():
 async def test_orchestrator_generate_document_basic(mocker):
     """Test orchestrator generate_document method."""
     mocker.patch('server.langgraph_orchestrator.Ollama')
-    mocker.patch('server.langgraph_orchestrator.create_tool_calling_agent')
+    mocker.patch('server.langgraph_orchestrator.create_openai_tools_agent')
     mocker.patch('server.langgraph_orchestrator.AgentExecutor')
 
     orchestrator = LangGraphOrchestrator()
@@ -218,7 +218,7 @@ async def test_orchestrator_generate_document_basic(mocker):
 async def test_orchestrator_error_handling(mocker):
     """Test orchestrator error handling."""
     mocker.patch('server.langgraph_orchestrator.Ollama')
-    mocker.patch('server.langgraph_orchestrator.create_tool_calling_agent')
+    mocker.patch('server.langgraph_orchestrator.create_openai_tools_agent')
     mocker.patch('server.langgraph_orchestrator.AgentExecutor')
 
     orchestrator = LangGraphOrchestrator()

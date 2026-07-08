@@ -10,8 +10,8 @@ from datetime import datetime
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-from langchain.tools import tool
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.tools import tool
+from langchain.agents import create_openai_tools_agent, AgentExecutor
 from langchain_community.llms import Ollama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
@@ -163,7 +163,7 @@ async def plan_node(state: DocumentGenerationState) -> DocumentGenerationState:
         ])
 
         # Create agent
-        agent = create_tool_calling_agent(llm, tools, prompt)
+        agent = create_openai_tools_agent(llm, tools, prompt)
         executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
         # Run planner

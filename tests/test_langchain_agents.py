@@ -174,7 +174,7 @@ def test_fetch_rag_context_tool_error_handling(mocker):
 def test_create_planner_agent(mocker):
     """Test planner agent creation."""
     mocker.patch('server.langchain_agents.Ollama')
-    mocker.patch('server.langchain_agents.create_tool_calling_agent')
+    mocker.patch('server.langchain_agents.create_openai_tools_agent')
     mocker.patch('server.langchain_agents.AgentExecutor')
 
     agent = create_planner_agent()
@@ -185,7 +185,7 @@ def test_create_planner_agent(mocker):
 def test_create_writer_agent(mocker):
     """Test writer agent creation."""
     mocker.patch('server.langchain_agents.Ollama')
-    mocker.patch('server.langchain_agents.create_tool_calling_agent')
+    mocker.patch('server.langchain_agents.create_openai_tools_agent')
     mocker.patch('server.langchain_agents.AgentExecutor')
 
     agent = create_writer_agent()
@@ -196,7 +196,7 @@ def test_create_writer_agent(mocker):
 def test_create_reviewer_agent(mocker):
     """Test reviewer agent creation."""
     mocker.patch('server.langchain_agents.Ollama')
-    mocker.patch('server.langchain_agents.create_tool_calling_agent')
+    mocker.patch('server.langchain_agents.create_openai_tools_agent')
     mocker.patch('server.langchain_agents.AgentExecutor')
 
     agent = create_reviewer_agent()
