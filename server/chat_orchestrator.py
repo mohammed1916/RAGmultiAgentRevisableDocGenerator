@@ -77,7 +77,9 @@ class ChatOrchestrator:
                     required=True,
                 )
 
-                response_text = f"Found {len(topics)} topics in {request}:\n\nWhich ones do you want to cover?"
+                # EXPLICITLY LIST topics in the message
+                topics_list = "\n".join([f"  • {t}" for t in topics[:12]])
+                response_text = f"Found {len(topics)} topics in {request}:\n\n{topics_list}\n\nWhich ones do you want to cover? (Or just ask me to advise!)"
                 context.conversation.append(
                     ChatMessage(role="assistant", content=response_text)
                 )
@@ -90,15 +92,15 @@ class ChatOrchestrator:
                     next_action="ask_more",
                 )
             else:
-                # No topics found, ask user to clarify
+                # No topics found, ask user to clarify or ask for recommendations
                 logger.warning(f"No topics found for: {request}")
-                response_text = f"I couldn't find specific topics for '{request}'. Which topics do you want to cover?"
+                response_text = f"I couldn't find specific topics for '{request}'.\n\nYou can:\n  1. Type the topics you want\n  2. Or say 'advise me' and I'll recommend topics"
                 context.conversation.append(
                     ChatMessage(role="assistant", content=response_text)
                 )
 
                 topics_question = ClarifyingQuestion(
-                    question=f"Which topics from {request}?",
+                    question=f"Which topics from {request}? (Or type 'advise me')",
                     key="topics",
                     options=None,  # Let user type
                     required=True,
