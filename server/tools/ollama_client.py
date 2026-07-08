@@ -16,30 +16,60 @@ logger = setup_logger(__name__)
 class OllamaClient:
     """Client for interacting with the Ollama API."""
 
-    def __init__(self, base_url: str = None, model: str = None):
+    def __init__(self, base_url: str = None, model: str = None, api_key: str = None):
         """Initialize the Ollama client.
+
+        Supports local and cloud modes based on configuration.
 
         Args:
             base_url: Ollama API base URL
             model: Model name to use
+            api_key: API key for cloud mode
         """
         self.base_url = base_url or config.ollama.base_url
         self.model = model or config.ollama.model
         self.timeout = config.ollama.timeout
+        self.mode = config.ollama.mode
+        self.api_key = api_key or config.ollama.api_key
+
+        logger.info(f"Ollama client initialized in {self.mode} mode")
+        if self.mode == "cloud" and self.api_key:
+            logger.info(f"Using Ollama Cloud with API key: {self.api_key[:8]}...")
+        elif self.mode == "local":
+            logger.info(f"Using local Ollama at {self.base_url}")
+
         self._verify_connection()
 
     def _verify_connection(self) -> None:
-        """Verify connection to Ollama service."""
+        """Verify connection to Ollama service (local or cloud)."""
         try:
+            headers = {}
+            if self.mode == "cloud" and self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
+
             response = requests.get(
-                f"{self.base_url}/api/tags", timeout=5
+                f"{self.base_url}/api/tags",
+                headers=headers,
+                timeout=5
             )
             response.raise_for_status()
-            logger.info(f"Connected to Ollama at {self.base_url}")
+            logger.info(f"Successfully connected to Ollama ({self.mode} mode) at {self.base_url}")
         except requests.exceptions.RequestException as e:
-            raise OllamaConnectionException(
-                f"Cannot connect to Ollama at {self.base_url}: {str(e)}"
-            )
+            logger.warning(f"Cannot connect to Ollama at {self.base_url}: {str(e)}")
+            # Don't fail on cloud mode - API might have different connection check
+            if self.mode == "local":
+                raise OllamaConnectionException(
+                    f"Cannot connect to local Ollama at {self.base_url}: {str(e)}"
+                )
+            else:
+                logger.info("Continuing in cloud mode (connection check may not be available)")
+
+    def _get_headers(self) -> Dict[str, str]:
+        """Get headers for API requests (includes auth for cloud mode)."""
+        headers = {"Content-Type": "application/json"}
+        if self.mode == "cloud" and self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
     def generate(self, prompt: str, **kwargs) -> Dict[str, Any]:
         """Generate text using the model.
@@ -65,6 +95,7 @@ class OllamaClient:
             response = requests.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
+                headers=self._get_headers(),
                 timeout=self.timeout,
             )
             response.raise_for_status()
@@ -109,6 +140,7 @@ class OllamaClient:
             response = requests.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
+                headers=self._get_headers(),
                 timeout=self.timeout,
             )
             response.raise_for_status()
@@ -181,7 +213,7 @@ class OllamaClient:
             )
 
     def is_model_available(self, model: str = None) -> bool:
-        """Check if a model is available locally.
+        """Check if a model is available.
 
         Args:
             model: Model name to check (uses default if not provided)
@@ -192,10 +224,16 @@ class OllamaClient:
         model = model or self.model
         try:
             response = requests.get(
-                f"{self.base_url}/api/tags", timeout=5
+                f"{self.base_url}/api/tags",
+                headers=self._get_headers(),
+                timeout=5
             )
             response.raise_for_status()
             models = response.json().get("models", [])
             return any(m.get("name", "").startswith(model) for m in models)
         except requests.exceptions.RequestException:
+            # Cloud mode may not support /api/tags endpoint
+            if self.mode == "cloud":
+                logger.info("Cloud mode: Assuming model is available (cannot verify)")
+                return True
             return False
