@@ -37,53 +37,102 @@ class ChatOrchestrator:
     def start_conversation(self, request: str) -> ChatResponse:
         """Start a new conversation with initial request.
 
-        Uses LLM to analyze request and suggest relevant subjects.
+        Immediately searches RAG for relevant topics based on request.
 
         Args:
             request: User's initial request for document
 
         Returns:
-            ChatResponse with LLM-generated subject options
+            ChatResponse with topics from RAG
         """
         logger.info(f"Starting conversation with request: {request[:100]}...")
 
         # Create context
         context = ChatContext(initial_request=request)
+        context.answers["subject"] = request  # Store the initial request as subject
 
         # Add user message
         context.conversation.append(
             ChatMessage(role="user", content=request)
         )
 
-        # Use LLM to analyze and suggest subjects
-        response_text = f"I'm your study scheduling agent!\n\nYour request: {request}\n\nLet me analyze what you're studying..."
+        response_text = f"Great! Let me find topics for '{request}' from the curriculum..."
         context.conversation.append(
             ChatMessage(role="assistant", content=response_text)
         )
 
-        # Call LLM to generate relevant subjects
+        # Immediately search RAG for topics based on initial request
         try:
-            subjects = self._generate_subjects_from_llm(request)
-            logger.info(f"LLM generated subjects: {subjects}")
+            results = self.rag.search_documents(request, top_k=15)
+            topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(results)]
+
+            if topics and len(topics) > 0:
+                logger.info(f"Found {len(topics)} topics for: {request}")
+
+                # Create question with topics from RAG
+                topics_question = ClarifyingQuestion(
+                    question=f"Which topics do you want to cover? (Select from below or type custom ones)",
+                    key="topics",
+                    options=topics[:12],  # Show up to 12 topics from RAG
+                    required=True,
+                )
+
+                response_text = f"Found {len(topics)} topics in {request}:\n\nWhich ones do you want to cover?"
+                context.conversation.append(
+                    ChatMessage(role="assistant", content=response_text)
+                )
+
+                return ChatResponse(
+                    message=response_text,
+                    questions=[topics_question],
+                    context=context,
+                    is_ready_to_generate=False,
+                    next_action="ask_more",
+                )
+            else:
+                # No topics found, ask user to clarify
+                logger.warning(f"No topics found for: {request}")
+                response_text = f"I couldn't find specific topics for '{request}'. Which topics do you want to cover?"
+                context.conversation.append(
+                    ChatMessage(role="assistant", content=response_text)
+                )
+
+                topics_question = ClarifyingQuestion(
+                    question=f"Which topics from {request}?",
+                    key="topics",
+                    options=None,  # Let user type
+                    required=True,
+                )
+
+                return ChatResponse(
+                    message=response_text,
+                    questions=[topics_question],
+                    context=context,
+                    is_ready_to_generate=False,
+                    next_action="ask_more",
+                )
+
         except Exception as e:
-            logger.warning(f"LLM subject generation failed: {e}")
-            subjects = ["Class 10", "Class 12", "JEE Main", "JEE Advanced"]  # Fallback
+            logger.error(f"RAG search failed: {e}")
+            response_text = f"Let me help you prepare for '{request}'. Which topics do you want to cover?"
+            context.conversation.append(
+                ChatMessage(role="assistant", content=response_text)
+            )
 
-        # Create question WITHOUT options - let user TYPE their subject
-        subject_question = ClarifyingQuestion(
-            question="What are you studying? (e.g., 'Class 12 Physics', 'JEE Mains', 'Calculus')",
-            key="subject",
-            options=None,  # No buttons - show text input instead
-            required=True,
-        )
+            topics_question = ClarifyingQuestion(
+                question=f"Which topics from {request}?",
+                key="topics",
+                options=None,
+                required=True,
+            )
 
-        return ChatResponse(
-            message=response_text,
-            questions=[subject_question],
-            context=context,
-            is_ready_to_generate=False,
-            next_action="ask_more",
-        )
+            return ChatResponse(
+                message=response_text,
+                questions=[topics_question],
+                context=context,
+                is_ready_to_generate=False,
+                next_action="ask_more",
+            )
 
     def _generate_subjects_from_llm(self, request: str) -> List[str]:
         """Generate relevant subjects using LLM based on user request.
@@ -138,77 +187,8 @@ Options for this request:"""
             ChatMessage(role="user", content=f"{answer}")
         )
 
-        # If user just answered subject, fetch curriculum topics
-        if question_key == "subject":
-            try:
-                results = self.rag.search_documents(answer, top_k=15)
-                topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(results)]
-
-                if topics and len(topics) > 0:
-                    # Create question with actual topics from curriculum
-                    topics_question = ClarifyingQuestion(
-                        question=f"Which topics from {answer} do you want to cover? (You can type multiple, comma-separated)",
-                        key="topics",
-                        options=topics[:10],  # Show up to 10 topics as suggestions
-                        required=True,
-                    )
-
-                    response_text = f"Perfect! I found {len(topics)} topics in the {answer} curriculum.\n\nSelect the topics you want to cover:"
-                    context.conversation.append(
-                        ChatMessage(role="assistant", content=response_text)
-                    )
-
-                    return ChatResponse(
-                        message=response_text,
-                        questions=[topics_question],
-                        context=context,
-                        is_ready_to_generate=False,
-                        next_action="ask_more",
-                    )
-                else:
-                    # No topics found, ask user to specify
-                    logger.warning(f"No topics found for: {answer}")
-                    response_text = f"I couldn't find specific topics for '{answer}' in the curriculum.\n\nPlease tell me which topics you want to cover (you can type them):"
-                    context.conversation.append(
-                        ChatMessage(role="assistant", content=response_text)
-                    )
-
-                    topics_question = ClarifyingQuestion(
-                        question="Which topics do you want to cover?",
-                        key="topics",
-                        options=None,  # Let user type
-                        required=True,
-                    )
-
-                    return ChatResponse(
-                        message=response_text,
-                        questions=[topics_question],
-                        context=context,
-                        is_ready_to_generate=False,
-                        next_action="ask_more",
-                    )
-            except Exception as e:
-                logger.error(f"RAG fetch failed: {e}")
-                # Fallback: ask user to specify topics
-                response_text = f"I had trouble finding topics for '{answer}'. Please tell me which topics you want to cover:"
-                context.conversation.append(
-                    ChatMessage(role="assistant", content=response_text)
-                )
-
-                topics_question = ClarifyingQuestion(
-                    question="Which topics do you want to cover?",
-                    key="topics",
-                    options=None,
-                    required=True,
-                )
-
-                return ChatResponse(
-                    message=response_text,
-                    questions=[topics_question],
-                    context=context,
-                    is_ready_to_generate=False,
-                    next_action="ask_more",
-                )
+        # Topics are already fetched in start_conversation
+        # Just handle when user answers topics question
 
         # Standard flow for other answers
         # Order: subject → topics → deadline → generate
