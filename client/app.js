@@ -316,7 +316,7 @@ function escapeHtml(text) {
  */
 async function loadDocuments() {
     try {
-        const response = await fetch(`${api.baseUrl}/files`);
+        const response = await fetch(`${api.baseURL}/files`);
         const data = await response.json();
         const docsList = document.getElementById('docsList');
 
@@ -347,7 +347,7 @@ async function loadDocuments() {
                         </div>
                     </div>
                     <div class="doc-actions">
-                        <a href="${api.baseUrl}/download/${encodeURIComponent(file.filename)}"
+                        <a href="${api.baseURL}/download/${encodeURIComponent(file.filename)}"
                            class="btn-download-small" download>
                             [Download]
                         </a>

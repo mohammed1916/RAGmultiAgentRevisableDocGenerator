@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .models import DocumentRequest, DocumentResponse
 from .orchestrator import Orchestrator
@@ -32,6 +33,16 @@ app.add_middleware(
 
 # Global orchestrator instance
 orchestrator = None
+
+# Mount static files (client UI)
+try:
+    from pathlib import Path
+    client_path = Path(__file__).parent.parent / "client"
+    if client_path.exists():
+        app.mount("/client", StaticFiles(directory=str(client_path)), name="static")
+        logger.info(f"Mounted static files from {client_path}")
+except Exception as e:
+    logger.warning(f"Could not mount static files: {str(e)}")
 
 
 @app.on_event("startup")
