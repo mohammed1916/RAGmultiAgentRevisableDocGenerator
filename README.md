@@ -58,8 +58,21 @@ Should return list of available models.
 
 ### Running the Server
 
+Use one of these methods:
+
+Option 1: Using the startup script (recommended)
 ```bash
-python server/api.py
+python run_server.py
+```
+
+Option 2: Using uvicorn directly
+```bash
+python -m uvicorn server.api:app --reload
+```
+
+Option 3: Using uvicorn without reload (production)
+```bash
+python -m uvicorn server.api:app --host 0.0.0.0 --port 8000
 ```
 
 Server starts on http://localhost:8000
@@ -314,9 +327,17 @@ Total: 69/70 tests passing
 
 ## Document Output
 
-Generated documents are saved in output/ directory:
+Generated documents are saved in `output/` directory:
 
-document_20260708_142530.docx
+Production API calls:
+- Filename format: `document_YYYYMMDD_HHMMSS.docx`
+- Location: `rag_app/output/document_20260708_142530.docx`
+- Files persist after generation (not deleted)
+
+Unit tests:
+- Tests use temporary directories (files deleted after test)
+- Test verification files saved to: `output/test_output_unit_test.docx`
+- Run: `python -m pytest tests/test_docx_generator.py::TestDOCXGenerator::test_save_to_output_folder -v`
 
 Structure:
 - Title (Document Type)
