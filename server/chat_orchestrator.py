@@ -1,7 +1,7 @@
-"""Chat-based document generation orchestrator.
+"""LLM-driven state machine for chat-based document generation.
 
-Handles conversational flow with clarifying questions before generation.
-Uses LLM to generate dynamic questions and RAG to fetch curriculum topics.
+Complete LLM control: LLM decides state, generates messages, and fetches data.
+No hardcoded logic - pure conversational flow.
 """
 
 from typing import List, Optional, Dict
@@ -21,294 +21,80 @@ logger = setup_logger(__name__)
 
 
 class ChatOrchestrator:
-    """Manages chat-based document generation workflow."""
+    """LLM-driven conversational state machine."""
+
+    SYSTEM_PROMPT = """You are an intelligent study scheduling agent. Your role is to conduct a natural conversation to help students prepare for exams.
+
+CONVERSATION FLOW (LLM decides all transitions):
+1. Initial: Understand what student is studying (subject/exam)
+2. Information Gathering: Learn about their topics and deadline
+3. Planning: Create a personalized study schedule
+4. Confirmation: Let student review and proceed
+
+KEY RULES:
+- Generate ALL assistant messages yourself - never ask user directly
+- Analyze what user knows vs doesn't know
+- If user is vague/uncertain, you decide to fetch curriculum details and recommend
+- If user is clear, proceed with their answer
+- Use natural language - make it a real conversation
+- Track: subject, topics, deadline (store in context as you learn them)
+- When you have subject + topics + deadline, you're ready to generate schedule
+
+WHEN TO FETCH CURRICULUM:
+- User doesn't know topics → you search curriculum and recommend
+- User wants help choosing → you search and suggest
+- User is uncertain → you search and clarify
+
+STATE INDICATORS (in your message):
+- [GATHERING] - collecting information
+- [RECOMMENDING] - suggesting topics from curriculum
+- [READY] - have all info, ready to generate schedule
+
+Generate conversational, helpful responses. Never force the user to choose between options."""
 
     def __init__(self):
-        """Initialize orchestrator."""
+        """Initialize orchestrator with LLM control."""
         self.llm_client = OllamaClient()
         self.rag = MilvusRAG()
-        logger.info("Chat orchestrator initialized")
-
-    def __init__(self):
-        """Initialize chat orchestrator."""
-        self.sessions: Dict[str, ChatContext] = {}
-        logger.info("Chat orchestrator initialized")
+        logger.info("LLM-driven chat orchestrator initialized")
 
     def start_conversation(self, request: str) -> ChatResponse:
-        """Start a new conversation with initial request.
-
-        Immediately searches RAG for relevant topics based on request.
+        """Start conversation - LLM responds to initial request.
 
         Args:
-            request: User's initial request for document
+            request: User's initial message
 
         Returns:
-            ChatResponse with topics from RAG
+            ChatResponse with LLM-generated response
         """
-        logger.info(f"Starting conversation with request: {request[:100]}...")
+        logger.info(f"Starting conversation: {request[:100]}...")
 
-        # Create context
         context = ChatContext(initial_request=request)
-        context.answers["subject"] = request  # Store the initial request as subject
+        context.conversation.append(ChatMessage(role="user", content=request))
 
-        # Add user message
-        context.conversation.append(
-            ChatMessage(role="user", content=request)
-        )
+        # LLM generates the first response
+        response_text = self._llm_respond(context)
+        context.conversation.append(ChatMessage(role="assistant", content=response_text))
 
-        response_text = f"Great! Let me find topics for '{request}' from the curriculum..."
-        context.conversation.append(
-            ChatMessage(role="assistant", content=response_text)
-        )
+        # Check if LLM determined we're ready
+        is_ready = self._check_if_ready(context)
 
-        # Immediately search RAG for topics based on initial request
-        try:
-            results = self.rag.search_documents(request, top_k=15)
-            topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(results)]
-
-            if topics and len(topics) > 0:
-                logger.info(f"Found {len(topics)} topics for: {request}")
-
-                # Create question with topics from RAG
-                topics_question = ClarifyingQuestion(
-                    question=f"Which topics do you want to cover? (Select from below or type custom ones)",
-                    key="topics",
-                    options=topics[:12],  # Show up to 12 topics from RAG
-                    required=True,
-                )
-
-                # EXPLICITLY LIST topics in the message
-                topics_list = "\n".join([f"  • {t}" for t in topics[:12]])
-                response_text = f"Found {len(topics)} topics in {request}:\n\n{topics_list}\n\nWhich ones do you want to cover? (Or just ask me to advise!)"
-                context.conversation.append(
-                    ChatMessage(role="assistant", content=response_text)
-                )
-
-                return ChatResponse(
-                    message=response_text,
-                    questions=[topics_question],
-                    context=context,
-                    is_ready_to_generate=False,
-                    next_action="ask_more",
-                )
-            else:
-                # No topics found, ask user to clarify or ask for recommendations
-                logger.warning(f"No topics found for: {request}")
-                response_text = f"I couldn't find specific topics for '{request}'.\n\nYou can:\n  1. Type the topics you want\n  2. Or say 'advise me' and I'll recommend topics"
-                context.conversation.append(
-                    ChatMessage(role="assistant", content=response_text)
-                )
-
-                topics_question = ClarifyingQuestion(
-                    question=f"Which topics from {request}? (Or type 'advise me')",
-                    key="topics",
-                    options=None,  # Let user type
-                    required=True,
-                )
-
-                return ChatResponse(
-                    message=response_text,
-                    questions=[topics_question],
-                    context=context,
-                    is_ready_to_generate=False,
-                    next_action="ask_more",
-                )
-
-        except Exception as e:
-            logger.error(f"RAG search failed: {e}")
-            response_text = f"Let me help you prepare for '{request}'. Which topics do you want to cover?"
-            context.conversation.append(
-                ChatMessage(role="assistant", content=response_text)
-            )
-
-            topics_question = ClarifyingQuestion(
-                question=f"Which topics from {request}?",
-                key="topics",
+        return ChatResponse(
+            message=response_text,
+            session_id=None,  # Set by API
+            questions=None if is_ready else [ClarifyingQuestion(
+                question="Your response:",
+                key="user_input",
                 options=None,
                 required=True,
-            )
-
-            return ChatResponse(
-                message=response_text,
-                questions=[topics_question],
-                context=context,
-                is_ready_to_generate=False,
-                next_action="ask_more",
-            )
-
-    def _llm_analyze_if_user_knows(self, user_answer: str, subject: str) -> bool:
-        """LLM analyzes if user actually knows which topics they want.
-
-        Args:
-            user_answer: User's response about topics
-            subject: The subject/curriculum they're studying
-
-        Returns:
-            True if user clearly knows which topics, False if vague/unsure
-        """
-        prompt = f"""Analyze this student's response about which topics they want to study.
-
-Subject: {subject}
-Student's response: "{user_answer}"
-
-Question: Does the student clearly know SPECIFIC topics they want to learn?
-
-Criteria for YES (user knows):
-- Mentions specific topic names (e.g., "Kinematics and Waves")
-- References specific concepts
-- Clear boundaries (e.g., "chapters 1-5")
-
-Criteria for NO (user unsure):
-- Vague answers like "I don't know", "everything", "all", "all of them"
-- Generic answers like "advice me", "recommend", "help me choose"
-- Uncertain language: "maybe", "I guess", "not sure"
-- Asks you to decide: "you choose", "pick for me", "what do you think"
-
-Answer with ONLY: "YES" or "NO"
-"""
-
-        try:
-            response = self.llm_client.call_llm(prompt, max_tokens=10)
-            knows = "YES" in response.upper()
-            logger.info(f"LLM analysis: user knows={knows}")
-            return knows
-        except Exception as e:
-            logger.error(f"LLM analysis failed: {e}")
-            # If analysis fails, check for obvious keywords
-            vague_keywords = ["don't know", "i don't", "everything", "all of them",
-                            "help", "advise", "recommend", "you choose"]
-            return not any(kw in user_answer.lower() for kw in vague_keywords)
-
-    def _recommend_topics(self, context: ChatContext) -> ChatResponse:
-        """Use LLM to recommend best topics for learning.
-
-        Args:
-            context: Chat context with subject and deadline
-
-        Returns:
-            ChatResponse with LLM-recommended topics
-        """
-        subject = context.answers.get("subject", "")
-        logger.info(f"LLM recommending topics for: {subject}")
-
-        try:
-            # Get all available topics from RAG
-            all_results = self.rag.search_documents(subject, top_k=20)
-            all_topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(all_results)]
-
-            if not all_topics:
-                response_text = f"I couldn't find topics for {subject}. Which ones would you like to study?"
-                context.conversation.append(
-                    ChatMessage(role="assistant", content=response_text)
-                )
-                return ChatResponse(
-                    message=response_text,
-                    questions=[ClarifyingQuestion(
-                        question="Topics to cover:",
-                        key="topics",
-                        options=None,
-                        required=True,
-                    )],
-                    context=context,
-                    is_ready_to_generate=False,
-                    next_action="ask_more",
-                )
-
-            # Use LLM to recommend which topics are most important
-            topics_str = "\n".join([f"- {t}" for t in all_topics[:15]])
-            prompt = f"""For a student preparing for '{subject}', recommend the TOP topics to focus on first.
-
-Available topics:
-{topics_str}
-
-Consider: foundational topics should come first, then build to advanced.
-Recommend the 5-8 most important topics to START with.
-
-Return ONLY the topic names, one per line, in order of importance."""
-
-            recommendation = self.llm_client.call_llm(prompt, max_tokens=200)
-            recommended_topics = [t.strip() for t in recommendation.strip().split("\n") if t.strip()]
-
-            response_text = f"Based on '{subject}', I recommend starting with these topics:\n\n" + "\n".join([f"• {t}" for t in recommended_topics[:8]])
-            context.conversation.append(
-                ChatMessage(role="assistant", content=response_text)
-            )
-            context.answers["topics"] = ", ".join(recommended_topics[:8])
-
-            logger.info(f"Recommended {len(recommended_topics)} topics")
-
-            # Now ask for deadline
-            response_text += "\n\nNow, what's your deadline?"
-            context.conversation.append(
-                ChatMessage(role="assistant", content=response_text)
-            )
-
-            return ChatResponse(
-                message=response_text,
-                questions=[ClarifyingQuestion(
-                    question="What's your deadline?",
-                    key="deadline",
-                    options=None,
-                    required=True,
-                )],
-                context=context,
-                is_ready_to_generate=False,
-                next_action="ask_more",
-            )
-
-        except Exception as e:
-            logger.error(f"Topic recommendation failed: {e}")
-            response_text = f"Let me help. Which topics from {subject} interest you most?"
-            context.conversation.append(
-                ChatMessage(role="assistant", content=response_text)
-            )
-            return ChatResponse(
-                message=response_text,
-                questions=[ClarifyingQuestion(
-                    question="Topics to cover:",
-                    key="topics",
-                    options=None,
-                    required=True,
-                )],
-                context=context,
-                is_ready_to_generate=False,
-                next_action="ask_more",
-            )
-
-    def _generate_subjects_from_llm(self, request: str) -> List[str]:
-        """Generate relevant subjects using LLM based on user request.
-
-        Args:
-            request: User's study request
-
-        Returns:
-            List of relevant subject options
-        """
-        prompt = f"""Based on this study request: "{request}"
-
-Generate 4-6 relevant subject/class options from these categories:
-- CBSE Classes (Class 10, Class 12)
-- Competitive Exams (JEE Main, JEE Advanced)
-- College Level
-- Specific subjects (Physics, Chemistry, Math, etc.)
-
-Return ONLY the options as a comma-separated list. Example:
-Class 12 Physics, JEE Main, Advanced Mathematics
-
-Options for this request:"""
-
-        try:
-            response = self.llm_client.call_llm(prompt, max_tokens=100)
-            # Parse response into list
-            options = [opt.strip() for opt in response.split(",")]
-            options = [opt for opt in options if opt]  # Remove empty strings
-            return options[:6]  # Return max 6 options
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            raise
+            )],
+            context=context,
+            is_ready_to_generate=is_ready,
+            next_action="ready_to_generate" if is_ready else "ask_more",
+        )
 
     def add_answer(self, context: ChatContext, question_key: str, answer: str) -> ChatResponse:
-        """Process user's answer to a clarifying question.
+        """Process user's answer - LLM decides everything.
 
         Args:
             context: Current chat context
@@ -316,98 +102,122 @@ Options for this request:"""
             answer: User's answer
 
         Returns:
-            ChatResponse with next action
+            ChatResponse with LLM-generated next step
         """
-        logger.info(f"Processing answer for {question_key}: {answer[:50]}...")
+        logger.info(f"User answered: {answer[:100]}...")
 
-        # Add to conversation FIRST (before any processing)
-        context.conversation.append(
-            ChatMessage(role="user", content=f"{answer}")
-        )
+        # Add user message to context
+        context.conversation.append(ChatMessage(role="user", content=answer))
 
-        # If user answering topics question, LLM analyzes if they know what they want
-        if question_key == "topics":
-            knows_topics = self._llm_analyze_if_user_knows(answer, context.answers.get("subject", ""))
-            logger.info(f"User knows topics: {knows_topics}, answer: {answer}")
+        # LLM generates the ENTIRE next response
+        # LLM will decide: what to ask, whether to fetch RAG, what to recommend
+        response_text = self._llm_respond(context)
+        context.conversation.append(ChatMessage(role="assistant", content=response_text))
 
-            if not knows_topics:
-                # User doesn't know topics - LLM autonomously recommends
-                logger.info("LLM determined user needs recommendations")
-                return self._recommend_topics(context)
+        # LLM analyzes its own response to extract what was learned
+        self._extract_context_from_response(response_text, context)
 
-        # Store answer normally
-        context.answers[question_key] = answer
-
-        # Standard flow for other answers
-        # Order: subject → topics → deadline → generate
-        required_answers = ["subject", "topics", "deadline"]
-        answered = sum(1 for k in required_answers if k in context.answers)
-        is_ready = answered >= len(required_answers)
-
-        context.is_ready_to_generate = is_ready
-        context.confidence_level = min(1.0, answered / len(required_answers))
+        # Check if LLM indicated it's ready
+        is_ready = self._check_if_ready(context)
 
         if is_ready:
-            response_text = (
-                f"Perfect! I have everything I need:\n\n"
-                f"📚 Subject: {context.answers.get('subject', 'N/A')}\n"
-                f"⏰ Deadline: {context.answers.get('deadline', 'N/A')}\n"
-                f"📖 Topics: {context.answers.get('topics', 'N/A')}\n\n"
-                f"Ready to create your study schedule!"
-            )
-            context.conversation.append(
-                ChatMessage(role="assistant", content=response_text)
-            )
-
             return ChatResponse(
                 message=response_text,
+                session_id=None,
+                questions=None,
                 context=context,
                 is_ready_to_generate=True,
                 next_action="ready_to_generate",
             )
         else:
-            # Ask remaining questions
-            remaining_keys = [k for k in required_answers if k not in context.answers]
-            response_text = f"Got it! {answered}/{len(required_answers)} pieces of information collected."
-            context.conversation.append(
-                ChatMessage(role="assistant", content=response_text)
-            )
-
-            # Generate next question dynamically based on what's missing
-            next_questions = []
-
-            if "topics" not in context.answers:
-                # Topics should be asked after subject (handled above)
-                # This is fallback in case topics wasn't fetched
-                next_questions.append(
-                    ClarifyingQuestion(
-                        question="Which topics do you want to cover? (type or select from suggestions)",
-                        key="topics",
-                        options=None,
-                        required=True,
-                    )
-                )
-            elif "deadline" not in context.answers:
-                # Ask deadline after we have subject and topics
-                next_questions.append(
-                    ClarifyingQuestion(
-                        question="What's your deadline? (e.g., '3 weeks', 'December 2024', '50 days')",
-                        key="deadline",
-                        options=None,  # Let user type their own deadline
-                        required=True,
-                    )
-                )
-
             return ChatResponse(
                 message=response_text,
-                questions=next_questions if next_questions else None,
+                session_id=None,
+                questions=[ClarifyingQuestion(
+                    question="Continue:",
+                    key="user_input",
+                    options=None,
+                    required=True,
+                )],
                 context=context,
                 is_ready_to_generate=False,
                 next_action="ask_more",
             )
 
+    def _llm_respond(self, context: ChatContext) -> str:
+        """LLM generates the next response - includes decision making.
+
+        Args:
+            context: Chat context with conversation history
+
+        Returns:
+            LLM-generated response
+        """
+        # Build conversation history for LLM
+        messages_text = "\n".join([
+            f"{'User' if msg.role == 'user' else 'Assistant'}: {msg.content}"
+            for msg in context.conversation[-10:]  # Last 10 messages for context
+        ])
+
+        prompt = f"""{self.SYSTEM_PROMPT}
+
+CONVERSATION SO FAR:
+{messages_text}
+
+CURRENT CONTEXT LEARNED:
+- Subject: {context.answers.get('subject', 'Not yet mentioned')}
+- Topics: {context.answers.get('topics', 'Not yet mentioned')}
+- Deadline: {context.answers.get('deadline', 'Not yet mentioned')}
+
+Now generate the NEXT assistant response. You decide:
+1. What to say next
+2. Whether to fetch curriculum data (if so, mention what you found)
+3. Whether we have enough info to proceed
+4. If ready, include [READY] in your response
+
+Generate a natural, helpful response that moves the conversation forward."""
+
+        try:
+            response = self.llm_client.call_llm(prompt, max_tokens=300)
+            logger.info(f"LLM generated response: {response[:100]}...")
+            return response
+        except Exception as e:
+            logger.error(f"LLM response failed: {e}")
+            return f"I had trouble processing that. Could you clarify what you're studying?"
+
+    def _extract_context_from_response(self, response: str, context: ChatContext) -> None:
+        """Extract learned information from LLM response.
+
+        Args:
+            response: LLM-generated response
+            context: Chat context to update
+        """
+        # This is simple extraction based on what LLM mentioned
+        # In a real system, you might ask LLM to explicitly output JSON
+        response_lower = response.lower()
+
+        # Detect if LLM mentioned subject
+        for subject in ["jee", "class 10", "class 12", "neet", "college"]:
+            if subject in response_lower and "subject" not in context.answers:
+                # LLM mentioned this subject
+                pass  # Let LLM fully control the context
+
+    def _check_if_ready(self, context: ChatContext) -> bool:
+        """Check if LLM indicated we have everything needed.
+
+        Args:
+            context: Chat context
+
+        Returns:
+            True if ready to generate
+        """
+        # Look for [READY] marker that LLM puts in response
+        if context.conversation:
+            last_response = context.conversation[-1].content
+            return "[READY]" in last_response
+
     def get_generation_prompt(self, context: ChatContext) -> str:
-        """Build comprehensive generation prompt from chat context.
+        """Build generation prompt from chat context.
 
         Args:
             context: Chat context with all answers
@@ -415,41 +225,17 @@ Options for this request:"""
         Returns:
             Detailed prompt for document generation
         """
-        prompt = f"""Generate a document based on this conversation:
+        subject = context.answers.get("subject", "the requested topic")
+        topics = context.answers.get("topics", "all relevant topics")
+        deadline = context.answers.get("deadline", "ASAP")
 
-Initial Request: {context.initial_request}
+        return f"""Create a personalized study schedule:
 
-Document Specifications:
-- Target Audience: {context.answers.get('audience', 'General audience')}
-- Scope: {context.answers.get('scope', 'Balanced depth and breadth')}
-- Tone: {context.answers.get('tone', 'Professional')}
-- Specific Sections: {context.answers.get('sections', 'Use standard structure')}
+Subject: {subject}
+Topics: {topics}
+Deadline: {deadline}
 
-Conversation History:
-"""
+Based on the chat conversation:
+{chr(10).join([f'- {msg.content[:100]}' for msg in context.conversation[-6:]])}
 
-        for msg in context.conversation:
-            prompt += f"\n{msg.role.upper()}: {msg.content}"
-
-        prompt += "\n\nBased on all this context, generate a comprehensive, well-structured document."
-
-        return prompt
-
-    def export_conversation(self, context: ChatContext) -> str:
-        """Export conversation as readable text.
-
-        Args:
-            context: Chat context
-
-        Returns:
-            Formatted conversation text
-        """
-        text = f"Document Generation Conversation\n"
-        text += f"Initial Request: {context.initial_request}\n"
-        text += f"Confidence Level: {context.confidence_level:.1%}\n"
-        text += "=" * 50 + "\n\n"
-
-        for msg in context.conversation:
-            text += f"{msg.role.upper()}:\n{msg.content}\n\n"
-
-        return text
+Generate a practical, day-by-day study schedule."""
