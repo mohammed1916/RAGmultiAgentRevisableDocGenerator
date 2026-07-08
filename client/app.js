@@ -18,6 +18,9 @@ const errorAlert = document.getElementById('errorAlert');
 document.addEventListener('DOMContentLoaded', async () => {
     await checkServerStatus();
     setupEventListeners();
+    await loadDocuments();
+    // Auto-refresh documents list every 5 seconds
+    setInterval(loadDocuments, 5000);
 });
 
 /**
@@ -306,6 +309,61 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+/**
+ * Load and display generated documents
+ */
+async function loadDocuments() {
+    try {
+        const response = await fetch(`${api.baseUrl}/files`);
+        const data = await response.json();
+        const docsList = document.getElementById('docsList');
+
+        if (!docsList) return; // Element not found, skip
+
+        // Update stats
+        document.getElementById('totalDocs').textContent = data.total || 0;
+        const totalSizeMB = (data.files || []).reduce((sum, f) => sum + (f.size_mb || 0), 0);
+        document.getElementById('totalSize').textContent = totalSizeMB.toFixed(2) + ' MB';
+
+        const files = data.files || [];
+
+        if (files.length === 0) {
+            docsList.innerHTML = '<div class="docs-empty">No documents generated yet. Create one above!</div>';
+            return;
+        }
+
+        // Build file list HTML
+        let html = '';
+        files.forEach(file => {
+            const created = new Date(file.created).toLocaleString();
+            html += `
+                <div class="doc-item">
+                    <div class="doc-info">
+                        <div class="doc-name">${escapeHtml(file.filename)}</div>
+                        <div class="doc-meta">
+                            Size: <strong>${file.size_mb}</strong> MB | Created: <strong>${created}</strong>
+                        </div>
+                    </div>
+                    <div class="doc-actions">
+                        <a href="${api.baseUrl}/download/${encodeURIComponent(file.filename)}"
+                           class="btn-download-small" download>
+                            [Download]
+                        </a>
+                    </div>
+                </div>
+            `;
+        });
+
+        docsList.innerHTML = html;
+    } catch (error) {
+        console.error('Error loading documents:', error);
+        const docsList = document.getElementById('docsList');
+        if (docsList) {
+            docsList.innerHTML = '<div class="docs-empty">[Error loading documents]</div>';
+        }
+    }
 }
 
 /**

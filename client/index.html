@@ -180,6 +180,34 @@
                 </div>
             </section>
 
+            <!-- Generated Documents List Section -->
+            <section class="section generated-docs-section">
+                <div class="section-header">
+                    <h2>Generated Documents</h2>
+                    <button type="button" class="btn btn-small" id="refreshDocsBtn" onclick="loadDocuments()">
+                        [Refresh]
+                    </button>
+                </div>
+
+                <div class="docs-stats">
+                    <div class="stat">
+                        <span class="stat-label">Total Files:</span>
+                        <span class="stat-value" id="totalDocs">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Total Size:</span>
+                        <span class="stat-value" id="totalSize">0 MB</span>
+                    </div>
+                </div>
+
+                <div id="docsList" class="docs-list">
+                    <div class="docs-loading">
+                        <div class="spinner-small"></div>
+                        Loading documents...
+                    </div>
+                </div>
+            </section>
+
             <!-- Examples Section -->
             <section class="section examples-section">
                 <h2>Try Examples</h2>
