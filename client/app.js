@@ -4,15 +4,23 @@
  */
 
 // DOM Elements
-const documentForm = document.getElementById('documentForm');
-const requestInput = document.getElementById('request');
-const submitBtn = document.getElementById('submitBtn');
-const loadingModal = document.getElementById('loadingModal');
+const chatMessages = document.getElementById('chatMessages');
+const chatInput = document.getElementById('chatInput');
+const chatSendBtn = document.getElementById('chatSendBtn');
+const chatQuestionsArea = document.getElementById('chatQuestionsArea');
+const progressSection = document.getElementById('progressSection');
+const progressBar = document.getElementById('progressBar');
+const progressPercent = document.getElementById('progressPercent');
 const resultsSection = document.getElementById('resultsSection');
 const serverStatusText = document.getElementById('statusText');
 const statusIndicator = document.getElementById('statusIndicator');
 const successAlert = document.getElementById('successAlert');
 const errorAlert = document.getElementById('errorAlert');
+
+// Chat state
+let currentChatContext = null;
+let currentSessionId = null;
+let isWaiting = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -33,7 +41,6 @@ async function checkServerStatus() {
             statusIndicator.classList.add('connected');
             statusIndicator.classList.remove('disconnected');
             serverStatusText.textContent = 'Connected';
-            submitBtn.disabled = false;
         } else {
             setServerDisconnected();
         }
@@ -46,46 +53,256 @@ function setServerDisconnected() {
     statusIndicator.classList.remove('connected');
     statusIndicator.classList.add('disconnected');
     serverStatusText.textContent = 'Disconnected';
-    submitBtn.disabled = true;
-    submitBtn.title = 'Server is not running. Start it with: python main.py';
 }
 
 /**
  * Setup event listeners
  */
 function setupEventListeners() {
-    documentForm.addEventListener('submit', handleFormSubmit);
+    chatSendBtn.addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
 }
 
 /**
- * Handle form submission
+ * Send initial chat message or answer
  */
-async function handleFormSubmit(e) {
-    e.preventDefault();
+async function sendChatMessage() {
+    const message = chatInput.value.trim();
+    if (!message || isWaiting) return;
 
-    const request = requestInput.value.trim();
-    if (!request) {
-        showError('Please enter a document request');
-        return;
+    if (!currentChatContext) {
+        // Initial message - start chat
+        await startChat(message);
+    } else {
+        // Answer to a question
+        await answerQuestion(message);
     }
 
+    chatInput.value = '';
+}
+
+/**
+ * Start new chat conversation
+ */
+async function startChat(initialRequest) {
+    isWaiting = true;
     try {
-        // Show loading modal
-        showLoadingModal();
-        clearResults();
+        addChatMessage('user', initialRequest);
+        showTyping();
 
-        // Generate document
-        const response = await api.generateDocument(request);
+        const response = await fetch(`${api.baseURL}/chat/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request: initialRequest })
+        });
 
-        // Display results
-        displayResults(response);
-        showSuccessAlert('Document generated successfully!');
+        if (!response.ok) throw new Error('Failed to start chat');
+        const data = await response.json();
+
+        removeTyping();
+        addChatMessage('assistant', data.message);
+
+        currentChatContext = data.context;
+        currentSessionId = 'session_' + Date.now();
+
+        updateProgress(data.context.confidence_level);
+        progressSection.style.display = 'block';
+
+        if (data.questions && data.questions.length > 0) {
+            displayChatQuestions(data.questions);
+        }
+
+        if (data.is_ready_to_generate) {
+            showGenerateButton();
+        }
     } catch (error) {
-        console.error('Error generating document:', error);
-        showError(`Error: ${error.message}`);
+        console.error('Error:', error);
+        removeTyping();
+        addChatMessage('assistant', '[ERROR] ' + error.message);
     } finally {
-        hideLoadingModal();
+        isWaiting = false;
     }
+}
+
+/**
+ * Answer a clarifying question
+ */
+async function answerQuestion(answer) {
+    isWaiting = true;
+    try {
+        addChatMessage('user', answer);
+        showTyping();
+
+        const response = await fetch(
+            `${api.baseURL}/chat/answer?session_id=${currentSessionId}&question_key=${currentQuestionKey}&answer=${encodeURIComponent(answer)}`,
+            { method: 'POST' }
+        );
+
+        if (!response.ok) throw new Error('Failed to answer question');
+        const data = await response.json();
+
+        removeTyping();
+        addChatMessage('assistant', data.message);
+
+        currentChatContext = data.context;
+        updateProgress(data.context.confidence_level);
+
+        if (data.is_ready_to_generate) {
+            showGenerateButton();
+        } else if (data.questions && data.questions.length > 0) {
+            displayChatQuestions(data.questions);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        removeTyping();
+        addChatMessage('assistant', '[ERROR] ' + error.message);
+    } finally {
+        isWaiting = false;
+    }
+}
+
+/**
+ * Display clarifying questions
+ */
+let currentQuestionKey = '';
+function displayChatQuestions(questions) {
+    if (!questions || questions.length === 0) return;
+
+    const q = questions[0];
+    currentQuestionKey = q.key;
+
+    const html = `<div><strong>${q.question}</strong></div>`;
+
+    if (q.options && q.options.length > 0) {
+        let optionsHtml = '<div class="question-options" style="margin-top: 8px;">';
+        q.options.forEach(opt => {
+            optionsHtml += `<button class="option-button" onclick="answerQuestion('${opt}')">${opt}</button>`;
+        });
+        optionsHtml += '</div>';
+        chatQuestionsArea.innerHTML = html + optionsHtml;
+    } else {
+        chatQuestionsArea.innerHTML = html + `
+            <div style="display: flex; gap: 8px; margin-top: 8px;">
+                <textarea id="answerInput" placeholder="Type your answer..." rows="2" style="flex: 1; padding: 8px; border: 2px solid #dee2e6; border-radius: 6px;"></textarea>
+                <button class="btn btn-primary" style="align-self: flex-end;" onclick="answerQuestion(document.getElementById('answerInput').value)">Submit</button>
+            </div>
+        `;
+        document.getElementById('answerInput').focus();
+    }
+}
+
+/**
+ * Show generate button when ready
+ */
+function showGenerateButton() {
+    chatQuestionsArea.innerHTML = `
+        <div style="text-align: center; padding: 20px;">
+            <p style="margin-bottom: 12px; font-weight: 600; color: #28a745;">✓ I have all the information I need!</p>
+            <p style="margin-bottom: 16px; color: #666; font-size: 14px;">I'll now create your document...</p>
+            <button class="btn btn-success" style="width: 100%; padding: 12px;" onclick="generateDocument()">Generate Document</button>
+        </div>
+    `;
+}
+
+/**
+ * Generate document from chat context
+ */
+async function generateDocument() {
+    isWaiting = true;
+    try {
+        addChatMessage('assistant', '⏳ Generating your document...');
+        showTyping();
+
+        const response = await fetch(`${api.baseURL}/chat/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: currentSessionId,
+                context: currentChatContext
+            })
+        });
+
+        if (!response.ok) throw new Error('Failed to generate document');
+        const data = await response.json();
+
+        removeTyping();
+        addChatMessage('assistant',
+            `✓ Document created!\n\n📄 ${data.document_filename}\n\nQuality: ${data.quality_scores.overall}/5\n\n[Download ready]`
+        );
+
+        // Show download button
+        chatQuestionsArea.innerHTML = `
+            <a href="${api.baseURL}/download/${data.document_filename}"
+               class="btn btn-success"
+               style="display: block; text-align: center; text-decoration: none; padding: 12px;">
+                ⬇️ Download: ${data.document_filename}
+            </a>
+        `;
+
+        // Refresh documents list
+        await loadDocuments();
+    } catch (error) {
+        console.error('Error:', error);
+        removeTyping();
+        addChatMessage('assistant', '[ERROR] ' + error.message);
+    } finally {
+        isWaiting = false;
+    }
+}
+
+/**
+ * Add message to chat
+ */
+function addChatMessage(role, content) {
+    const msg = document.createElement('div');
+    msg.className = `chat-message ${role}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+    bubble.textContent = content;
+
+    msg.appendChild(bubble);
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * Show typing indicator
+ */
+function showTyping() {
+    const msg = document.createElement('div');
+    msg.className = 'chat-message assistant';
+    msg.id = 'typingIndicator';
+
+    const typing = document.createElement('div');
+    typing.className = 'typing-dots';
+    typing.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+
+    msg.appendChild(typing);
+    chatMessages.appendChild(msg);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * Remove typing indicator
+ */
+function removeTyping() {
+    const typing = document.getElementById('typingIndicator');
+    if (typing) typing.remove();
+}
+
+/**
+ * Update progress bar
+ */
+function updateProgress(confidence) {
+    const percent = Math.round(confidence * 100);
+    progressBar.style.width = percent + '%';
+    progressPercent.textContent = percent + '%';
 }
 
 /**
