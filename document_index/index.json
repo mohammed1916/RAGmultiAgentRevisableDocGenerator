@@ -1,0 +1,75 @@
+{
+  "documents": {
+    "jee_mathematics": {
+      "id": "jee_mathematics",
+      "content": "Relations and Functions, Inverse Trigonometric Functions, Matrices and Determinants, Continuity and Differentiability, Applications of Derivatives, Integrals, Applications of Integrals, Differential Equations, Vector Algebra, 3D Geometry, Linear Programming, Probability",
+      "full_content": "Relations and Functions, Inverse Trigonometric Functions, Matrices and Determinants, Continuity and Differentiability, Applications of Derivatives, Integrals, Applications of Integrals, Differential Equations, Vector Algebra, 3D Geometry, Linear Programming, Probability",
+      "content_length": 270,
+      "metadata": {
+        "subject": "Mathematics",
+        "level": "Advanced"
+      }
+    },
+    "jee_physics": {
+      "id": "jee_physics",
+      "content": "Electrostatics, Current Electricity, Magnetic Effects of Current, Magnetism, Electromagnetic Induction, Alternating Current, Electromagnetic Waves, Optics, Modern Physics, Nuclear Physics",
+      "full_content": "Electrostatics, Current Electricity, Magnetic Effects of Current, Magnetism, Electromagnetic Induction, Alternating Current, Electromagnetic Waves, Optics, Modern Physics, Nuclear Physics",
+      "content_length": 187,
+      "metadata": {
+        "subject": "Physics",
+        "level": "Advanced"
+      }
+    },
+    "jee_chemistry": {
+      "id": "jee_chemistry",
+      "content": "Atomic Structure, Chemical Bonding, States of Matter, Thermodynamics, Chemical Equilibrium, Electrochemistry, Kinetics, Surface Chemistry, Coordination Compounds, Organic Chemistry, Polymers, Biomolecules",
+      "full_content": "Atomic Structure, Chemical Bonding, States of Matter, Thermodynamics, Chemical Equilibrium, Electrochemistry, Kinetics, Surface Chemistry, Coordination Compounds, Organic Chemistry, Polymers, Biomolecules",
+      "content_length": 204,
+      "metadata": {
+        "subject": "Chemistry",
+        "level": "Advanced"
+      }
+    },
+    "python_basics": {
+      "id": "python_basics",
+      "content": "Variables, Data Types, Operators",
+      "full_content": "Variables, Data Types, Operators",
+      "content_length": 32,
+      "metadata": {
+        "module": "Basics",
+        "course": "Python"
+      }
+    },
+    "python_control flow": {
+      "id": "python_control flow",
+      "content": "if/else, Loops, Functions",
+      "full_content": "if/else, Loops, Functions",
+      "content_length": 25,
+      "metadata": {
+        "module": "Control Flow",
+        "course": "Python"
+      }
+    },
+    "python_oop": {
+      "id": "python_oop",
+      "content": "Classes, Inheritance, Polymorphism",
+      "full_content": "Classes, Inheritance, Polymorphism",
+      "content_length": 34,
+      "metadata": {
+        "module": "OOP",
+        "course": "Python"
+      }
+    },
+    "python_libraries": {
+      "id": "python_libraries",
+      "content": "NumPy, Pandas, Matplotlib",
+      "full_content": "NumPy, Pandas, Matplotlib",
+      "content_length": 25,
+      "metadata": {
+        "module": "Libraries",
+        "course": "Python"
+      }
+    }
+  },
+  "count": 7
+}
