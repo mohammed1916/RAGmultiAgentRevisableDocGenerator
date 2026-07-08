@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Generation - AI Agent System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>📄 Document Generation System</h1>
+                <p>Autonomous AI-powered document creation</p>
+            </div>
+            <div class="server-status" id="serverStatus">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Checking...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Request Form Section -->
+            <section class="section form-section">
+                <h2>Generate Document</h2>
+                <form id="documentForm" class="document-form">
+                    <div class="form-group">
+                        <label for="request">Document Request *</label>
+                        <textarea
+                            id="request"
+                            name="request"
+                            placeholder="Describe what document you want to generate (e.g., 'Create a technical specification for a REST API')"
+                            rows="5"
+                            required
+                        ></textarea>
+                        <small>Be specific about the document type, audience, and scope</small>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="submitBtn">
+                        <span class="btn-text">Generate Document</span>
+                        <span class="btn-loading" style="display: none;">
+                            ⏳ Generating...
+                        </span>
+                    </button>
+                </form>
+            </section>
+
+            <!-- Results Section -->
+            <section class="section results-section" id="resultsSection" style="display: none;">
+                <h2>Generation Results</h2>
+
+                <!-- Status Alert -->
+                <div class="alert alert-success" id="successAlert" style="display: none;">
+                    ✓ Document generated successfully!
+                </div>
+                <div class="alert alert-error" id="errorAlert" style="display: none;"></div>
+
+                <!-- Document Info -->
+                <div class="result-card">
+                    <h3>Document Information</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <label>Document Type</label>
+                            <span id="docType">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>File</label>
+                            <span id="docFile" class="file-link">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Status</label>
+                            <span id="docStatus">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Execution Plan -->
+                <div class="result-card">
+                    <h3>Execution Plan</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <label>Tasks Generated</label>
+                            <span id="tasksCount">-</span>
+                        </div>
+                        <div class="info-item">
+                            <label>Sections</label>
+                            <span id="sectionsCount">-</span>
+                        </div>
+                    </div>
+                    <details>
+                        <summary>View Assumptions</summary>
+                        <div id="assumptionsList" class="assumptions-list"></div>
+                    </details>
+                    <details>
+                        <summary>View Document Outline</summary>
+                        <ol id="outlineList" class="outline-list"></ol>
+                    </details>
+                </div>
+
+                <!-- Quality Scores -->
+                <div class="result-card">
+                    <h3>Quality Assessment</h3>
+                    <div class="scores-grid">
+                        <div class="score-item">
+                            <label>Relevance</label>
+                            <div class="score-bar">
+                                <div class="score-fill" id="relevanceScore"></div>
+                            </div>
+                            <span id="relevanceValue">-/5</span>
+                        </div>
+                        <div class="score-item">
+                            <label>Completeness</label>
+                            <div class="score-bar">
+                                <div class="score-fill" id="completenessScore"></div>
+                            </div>
+                            <span id="completenessValue">-/5</span>
+                        </div>
+                        <div class="score-item">
+                            <label>Coherence</label>
+                            <div class="score-bar">
+                                <div class="score-fill" id="coherenceScore"></div>
+                            </div>
+                            <span id="coherenceValue">-/5</span>
+                        </div>
+                        <div class="score-item">
+                            <label>Structure</label>
+                            <div class="score-bar">
+                                <div class="score-fill" id="structureScore"></div>
+                            </div>
+                            <span id="structureValue">-/5</span>
+                        </div>
+                        <div class="score-item overall">
+                            <label>Overall</label>
+                            <div class="score-bar">
+                                <div class="score-fill" id="overallScore"></div>
+                            </div>
+                            <span id="overallValue">-/5</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Performance Metrics -->
+                <div class="result-card">
+                    <h3>Performance Metrics</h3>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <label>Total Execution Time</label>
+                            <span id="totalTime" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-item">
+                            <label>Planner</label>
+                            <span id="plannerTime" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-item">
+                            <label>Writer</label>
+                            <span id="writerTime" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-item">
+                            <label>Reviewer</label>
+                            <span id="reviewerTime" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-item">
+                            <label>DOCX Generation</label>
+                            <span id="docxTime" class="metric-value">-</span>
+                        </div>
+                        <div class="metric-item">
+                            <label>Review Iterations</label>
+                            <span id="reviewIterations" class="metric-value">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Download Button -->
+                <div style="margin-top: 20px; text-align: center;">
+                    <a href="#" id="downloadBtn" class="btn btn-success">
+                        ⬇️ Download Document
+                    </a>
+                </div>
+            </section>
+
+            <!-- Examples Section -->
+            <section class="section examples-section">
+                <h2>Try Examples</h2>
+                <div class="examples-grid">
+                    <div class="example-card" onclick="fillExample(this)">
+                        <h4>📋 Technical Specification</h4>
+                        <p>Create a technical specification for a RESTful API that manages a library catalog system</p>
+                    </div>
+                    <div class="example-card" onclick="fillExample(this)">
+                        <h4>💼 Business Proposal</h4>
+                        <p>Generate a business proposal for implementing cloud infrastructure migration</p>
+                    </div>
+                    <div class="example-card" onclick="fillExample(this)">
+                        <h4>🛡️ Security Policy</h4>
+                        <p>Write comprehensive information security policy and procedures document</p>
+                    </div>
+                    <div class="example-card" onclick="fillExample(this)">
+                        <h4>🔧 Disaster Recovery</h4>
+                        <p>Create disaster recovery procedures for a production Kubernetes cluster</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Autonomous Multi-Agent Document Generation System | Powered by Local AI</p>
+        </footer>
+    </div>
+
+    <!-- Loading Modal -->
+    <div class="modal" id="loadingModal" style="display: none;">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <h3 id="loadingText">Generating document...</h3>
+            <p id="loadingPhase" style="color: #666; font-size: 14px;">Phase: Planning</p>
+        </div>
+    </div>
+
+    <script src="api.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
