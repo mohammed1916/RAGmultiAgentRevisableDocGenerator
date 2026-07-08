@@ -1,7 +1,7 @@
 """Chat-based document generation orchestrator.
 
 Handles conversational flow with clarifying questions before generation.
-Uses RAG to fetch curriculum and ask context-aware questions.
+Uses LLM to generate dynamic questions and RAG to fetch curriculum topics.
 """
 
 from typing import List, Optional, Dict
@@ -14,6 +14,7 @@ from .models import (
     ChatResponse,
 )
 from .tools.milvus_rag import MilvusRAG
+from .tools.ollama_client import OllamaClient
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -22,32 +23,11 @@ logger = setup_logger(__name__)
 class ChatOrchestrator:
     """Manages chat-based document generation workflow."""
 
-    # Initial questions to determine subject/class
-    INITIAL_QUESTIONS = [
-        ClarifyingQuestion(
-            question="What are you studying? (Class/Level/Subject)",
-            key="subject",
-            options=["Class 10 Science", "Class 12 Physics", "Class 12 Chemistry",
-                    "Class 12 Math", "JEE Main", "JEE Advanced", "College Level"],
-            required=True,
-        ),
-        ClarifyingQuestion(
-            question="What's your exam/completion deadline?",
-            key="deadline",
-            options=["1 week", "1 month", "3 months", "6 months"],
-            required=True,
-        ),
-    ]
-
-    # Fallback generic questions if no RAG context
-    GENERIC_QUESTIONS = [
-        ClarifyingQuestion(
-            question="What tone would you prefer?",
-            key="tone",
-            options=["Formal", "Professional but conversational", "Casual"],
-            required=True,
-        ),
-    ]
+    def __init__(self):
+        """Initialize orchestrator."""
+        self.llm_client = OllamaClient()
+        self.rag = MilvusRAG()
+        logger.info("Chat orchestrator initialized")
 
     def __init__(self):
         """Initialize chat orchestrator."""
@@ -57,11 +37,13 @@ class ChatOrchestrator:
     def start_conversation(self, request: str) -> ChatResponse:
         """Start a new conversation with initial request.
 
+        Uses LLM to analyze request and suggest relevant subjects.
+
         Args:
             request: User's initial request for document
 
         Returns:
-            ChatResponse with initial questions
+            ChatResponse with LLM-generated subject options
         """
         logger.info(f"Starting conversation with request: {request[:100]}...")
 
@@ -73,24 +55,67 @@ class ChatOrchestrator:
             ChatMessage(role="user", content=request)
         )
 
-        # Use curriculum-aware initial questions
-        questions = self.INITIAL_QUESTIONS
-        response_text = (
-            f"I'm your study scheduling agent! Let me understand what you're studying:\n\n"
-            f"Your request: {request}"
-        )
-
+        # Use LLM to analyze and suggest subjects
+        response_text = f"I'm your study scheduling agent!\n\nYour request: {request}\n\nLet me analyze what you're studying..."
         context.conversation.append(
             ChatMessage(role="assistant", content=response_text)
         )
 
+        # Call LLM to generate relevant subjects
+        try:
+            subjects = self._generate_subjects_from_llm(request)
+            logger.info(f"LLM generated subjects: {subjects}")
+        except Exception as e:
+            logger.warning(f"LLM subject generation failed: {e}")
+            subjects = ["Class 10", "Class 12", "JEE Main", "JEE Advanced"]  # Fallback
+
+        # Create question with LLM-generated options
+        subject_question = ClarifyingQuestion(
+            question="What are you studying?",
+            key="subject",
+            options=subjects,
+            required=True,
+        )
+
         return ChatResponse(
             message=response_text,
-            questions=questions,
+            questions=[subject_question],
             context=context,
             is_ready_to_generate=False,
             next_action="ask_more",
         )
+
+    def _generate_subjects_from_llm(self, request: str) -> List[str]:
+        """Generate relevant subjects using LLM based on user request.
+
+        Args:
+            request: User's study request
+
+        Returns:
+            List of relevant subject options
+        """
+        prompt = f"""Based on this study request: "{request}"
+
+Generate 4-6 relevant subject/class options from these categories:
+- CBSE Classes (Class 10, Class 12)
+- Competitive Exams (JEE Main, JEE Advanced)
+- College Level
+- Specific subjects (Physics, Chemistry, Math, etc.)
+
+Return ONLY the options as a comma-separated list. Example:
+Class 12 Physics, JEE Main, Advanced Mathematics
+
+Options for this request:"""
+
+        try:
+            response = self.llm_client.call_llm(prompt, max_tokens=100)
+            # Parse response into list
+            options = [opt.strip() for opt in response.split(",")]
+            options = [opt for opt in options if opt]  # Remove empty strings
+            return options[:6]  # Return max 6 options
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            raise
 
     def add_answer(self, context: ChatContext, question_key: str, answer: str) -> ChatResponse:
         """Process user's answer to a clarifying question.
