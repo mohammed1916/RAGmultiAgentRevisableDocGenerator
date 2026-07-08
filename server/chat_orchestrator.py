@@ -69,11 +69,11 @@ class ChatOrchestrator:
             logger.warning(f"LLM subject generation failed: {e}")
             subjects = ["Class 10", "Class 12", "JEE Main", "JEE Advanced"]  # Fallback
 
-        # Create question with LLM-generated options
+        # Create question WITHOUT options - let user TYPE their subject
         subject_question = ClarifyingQuestion(
-            question="What are you studying?",
+            question="What are you studying? (e.g., 'Class 12 Physics', 'JEE Mains', 'Calculus')",
             key="subject",
-            options=subjects,
+            options=None,  # No buttons - show text input instead
             required=True,
         )
 
@@ -203,9 +203,31 @@ Options for this request:"""
                 ChatMessage(role="assistant", content=response_text)
             )
 
+            # Generate next question dynamically
+            next_questions = []
+            if "deadline" not in context.answers:
+                next_questions.append(
+                    ClarifyingQuestion(
+                        question="What's your deadline? (e.g., '3 weeks', 'December 2024', '90 days')",
+                        key="deadline",
+                        options=None,  # Let user type their own deadline
+                        required=True,
+                    )
+                )
+            elif "topics" not in context.answers:
+                # Will be handled when fetching from RAG
+                next_questions.append(
+                    ClarifyingQuestion(
+                        question="Which topics do you want to cover? (type or select from suggestions)",
+                        key="topics",
+                        options=None,
+                        required=True,
+                    )
+                )
+
             return ChatResponse(
                 message=response_text,
-                questions=None,  # Let frontend know to continue asking
+                questions=next_questions if next_questions else None,
                 context=context,
                 is_ready_to_generate=False,
                 next_action="ask_more",
