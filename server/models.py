@@ -1,6 +1,7 @@
 """Pydantic models for the application."""
 
 from typing import Any, Dict, List, Optional
+from datetime import datetime, date
 from pydantic import BaseModel, Field
 
 
@@ -108,3 +109,83 @@ class DocumentResponse(BaseModel):
     metrics: PipelineMetrics
     quality_scores: Optional[QualityScore] = None
     message: str = ""
+
+
+# Student State & Progress Models
+
+class TopicProgress(BaseModel):
+    """Progress on a single topic."""
+
+    topic_name: str
+    completed_date: Optional[date] = None
+    confidence: float = Field(0.0, ge=0.0, le=1.0)
+    hours_spent: float = 0.0
+    revision_count: int = 0
+    last_revised_date: Optional[date] = None
+
+
+class StudentState(BaseModel):
+    """Complete student progress state."""
+
+    student_id: str
+    created_date: date
+    exam_deadline: Optional[date] = None
+    learned_topics: List[TopicProgress] = Field(default_factory=list)
+    available_hours_per_day: float = 6.0
+    learning_velocity: float = 0.5
+    last_updated: datetime = Field(default_factory=datetime.now)
+    timezone: str = "UTC"
+
+    def get_learned_topic_names(self) -> set:
+        """Get names of all learned topics (confidence > 0.5)."""
+        return {t.topic_name for t in self.learned_topics if t.confidence > 0.5}
+
+    def get_unlearned_topic_names(self) -> set:
+        """Get names of topics not yet learned."""
+        return {t.topic_name for t in self.learned_topics if t.confidence <= 0.5}
+
+    def get_days_until_exam(self) -> Optional[int]:
+        """Days remaining until exam deadline."""
+        if not self.exam_deadline:
+            return None
+        today = date.today()
+        return (self.exam_deadline - today).days
+
+    def get_remaining_topics(self, total_curriculum_topics: int) -> int:
+        """Estimate remaining topics to learn."""
+        learned_count = len(self.get_learned_topic_names())
+        return max(0, total_curriculum_topics - learned_count)
+
+
+class ProgressClaim(BaseModel):
+    """Extracted progress claim from user input."""
+
+    claim_type: str
+    topic_name: Optional[str] = None
+    completion_date: Optional[date] = None
+    hours: Optional[float] = None
+    confidence: Optional[float] = None
+    extracted_text: str
+
+
+class ProgressUpdate(BaseModel):
+    """Update to apply to student state."""
+
+    student_id: str
+    claims: List[ProgressClaim]
+    updated_state: StudentState
+    extraction_confidence: float = 0.8
+
+
+class StudyPlan(BaseModel):
+    """Generated study plan with validation metadata."""
+
+    student_id: str
+    generated_date: datetime = Field(default_factory=datetime.now)
+    scope: str
+    topics: List[str]
+    daily_load: float
+    total_hours: float
+    is_feasible: bool
+    validation_issues: List[str] = Field(default_factory=list)
+    confidence_score: float = Field(0.0, ge=0.0, le=1.0)

@@ -1,930 +1,572 @@
-# Autonomous Multi-Agent AI Document Generation System
+Autonomous Multi-Agent JEE/Education Prep System
 
-A production-quality document generation system that leverages local AI models to autonomously plan, write, review, and generate professional Microsoft Word documents.
+A production-ready autonomous AI agent system that generates personalized study plans, respects student progress, and validates recommendations against time constraints. Deployed with FastAPI, local Ollama LLM, Milvus vector database, and comprehensive metrics.
 
 ## Overview
 
-This system demonstrates advanced AI engineering concepts including:
-- **Multi-agent orchestration** with specialized agent responsibilities
-- **Autonomous execution planning** without human intervention
-- **Self-review and quality assurance** through agent-based evaluation
-- **Structured output generation** (JSON → Word documents)
-- **Production-grade metrics collection** and observability
-- **Clean architecture** following SOLID principles
-
-The system is designed as a portfolio project for AI Engineer and GenAI Engineer roles, showcasing understanding of:
-- Agent-based system design
-- LLM integration and prompt engineering
-- Microservices architecture
-- Comprehensive testing and observability
-- Professional software engineering practices
-
-## Architecture
-
-### System Components
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Server                            │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  API Endpoints (/agent, /health, /metrics)          │   │
-│  └─────────────────────┬────────────────────────────────┘   │
-│                        │                                     │
-│  ┌─────────────────────▼────────────────────────────────┐   │
-│  │  Orchestrator (Non-LLM Business Logic)               │   │
-│  │  - Coordinates agents                                │   │
-│  │  - Passes outputs between agents                     │   │
-│  │  - Collects metrics                                  │   │
-│  └─────────────────────┬────────────────────────────────┘   │
-│                        │                                     │
-│  ┌─────────────────────▼────────────────────────────────┐   │
-│  │              Multi-Agent Pipeline                    │   │
-│  │                                                      │   │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐          │   │
-│  │  │ Planner  │→ │ Writer   │→ │ Reviewer │          │   │
-│  │  │ Agent    │  │ Agent    │  │ Agent    │          │   │
-│  │  └──────────┘  └──────────┘  └──────────┘          │   │
-│  │                                                      │   │
-│  └─────────────────────┬────────────────────────────────┘   │
-│                        │                                     │
-│  ┌─────────────────────▼────────────────────────────────┐   │
-│  │  Tools Layer                                         │   │
-│  │  ┌────────────┬────────────┬────────────┐           │   │
-│  │  │ Ollama     │ DOCX Gen   │ Metrics    │           │   │
-│  │  │ Client     │ (Determ)   │ Collector  │           │   │
-│  │  └────────────┴────────────┴────────────┘           │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                   Python Client Library                      │
-│  DocumentGenerationClient (requests-based)                  │
-└─────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────┐
-│                    Local Ollama Service                      │
-│  qwen3:8b (or other local models)                          │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Execution Flow
-
-```
-User Request
-    │
-    ▼
-┌─────────────────────────┐
-│ 1. PLANNER AGENT        │
-│                         │
-│ - Understand request    │
-│ - ID document type      │
-│ - Generate assumptions  │
-│ - Create task list      │
-│ - Build outline         │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│ 2. WRITER AGENT         │
-│                         │
-│ - Write sections in     │
-│   order (never full     │
-│   document at once)     │
-│ - Consider context      │
-│ - Maintain consistency  │
-│ - Professional tone     │
-└────────┬────────────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│ 3. REVIEWER AGENT       │
-│                         │
-│ - Check grammar         │
-│ - Verify consistency    │
-│ - Assess flow           │
-│ - Review tone           │
-│ - Return feedback       │
-└────────┬────────────────┘
-         │
-    ┌────┴─────────┐
-    │              │
- Issues?       No Issues
-    │              │
-    ▼              ▼
- Iterate      Score Quality
-    │              │
-    └────┬─────────┘
-         │
-         ▼
-┌─────────────────────────┐
-│ 4. DOCX GENERATION      │
-│                         │
-│ - Deterministic         │
-│ - No LLM involved       │
-│ - Professional layout   │
-│ - Save to .docx        │
-└────────┬────────────────┘
-         │
-         ▼
-   Return Response
-   (doc + metrics)
-```
-
----
-
-## Core Engineering Improvement: Iterative Refinement with Feedback Loops
-
-### What Problem Does It Solve?
-
-Autonomous LLM-based systems often produce content with quality issues when written in a single pass:
-
-**Issues without iterative refinement:**
-- **Inconsistent terminology** across sections ("API endpoint" in section 2, "web service" in section 4)
-- **Logical flow problems** (conclusions contradict earlier statements)
-- **Grammar & style inconsistencies** (section 1 is formal, section 3 is casual)
-- **Incomplete coverage** (section 1 mentions a concept but section 2 doesn't explain it)
-- **Tone misalignment** (technical sections mixed with marketing language)
-
-**Real example:**
-- Planner outlines a technical specification with 5 sections
-- Writer produces all sections
-- Review discovers: "Implementation Strategy" calls it "API Gateway" but "Architecture" calls it "Service Mesh"
-- **Without refinement:** Document ships with inconsistency
-- **With refinement:** The problematic section gets rewritten to fix this specific issue
-
-### How It's Implemented
-
-#### 1. **Enhanced Reviewer Agent** — Section-Specific Feedback Detection
-
-Instead of generic quality flags, the Reviewer now identifies exactly which sections have issues and why:
-
-```python
-# BEFORE: Generic, non-actionable feedback
-{
-    "has_issues": True,
-    "corrections": "Fix consistency issues"
-}
-
-# AFTER: Specific, section-targeted feedback
-{
-    "has_issues": True,
-    "section_feedback": [
-        {
-            "section_title": "Technical Architecture",
-            "issues": ["Inconsistent service naming", "Missing security details"],
-            "feedback": "Clarify that 'API Gateway' is the single entry point. 
-                         Update all references. Reference threat model from Section 5."
-        },
-        {
-            "section_title": "Deployment Strategy",
-            "issues": ["Vague deployment timeline"],
-            "feedback": "Align timeline with sprint milestones mentioned in Project Timeline."
-        }
-    ]
-}
-```
-
-#### 2. **Writer Agent Revision Mode** — Targeted Section Rewrites
-
-Writer now accepts revision feedback and **rewrites only the affected section** with that feedback in mind:
-
-```python
-# During refinement:
-revision_feedback = """
-Clarify that 'API Gateway' is the single entry point for all requests.
-Ensure all subsequent references use this terminology.
-Reference the threat model from Section 5 for security considerations.
-"""
-
-revised_section = writer.write_section(
-    request,
-    plan,
-    section_index=1,
-    previous_sections=sections[:1],
-    revision_feedback=revision_feedback  # ← NEW: Targeted feedback
-)
-```
-
-#### 3. **Orchestrator Refinement Loop** — Iterative Quality Improvement
-
-The orchestrator now actually applies fixes instead of just logging issues:
-
-```python
-# Review Iteration Loop
-for iteration in range(1, max_iterations + 1):
-    feedback = reviewer.review_document(doc_type, sections)
-    
-    if not feedback.has_issues:
-        logger.info("Quality check passed - no issues found ✓")
-        break
-    else:
-        # IMPROVEMENT: Actually fix the issues (not just log them)
-        sections = orchestrator._refine_sections(
-            request, plan, sections, feedback
-        )
-        logger.info(f"Refined {len(feedback.section_feedback)} sections ✓")
-        # Loop continues, re-review the refined document
-```
-
-### Example Walk-Through
-
-**Scenario:** Project Proposal document generation
-
-**Iteration 1 - Initial Write & Review:**
-- Writer produces all 6 sections
-- Reviewer checks and finds issues in 2 sections:
-  - Section "Budget": Says "estimated at $50K" 
-  - Section "ROI Analysis": Says "based on $75K investment"
-  - Issue: Budget amount is inconsistent
-
-**Review Output:**
-```
-Section "Budget" - Issue: Budget figure inconsistency
-  Feedback: Update budget to $75K to match ROI Analysis section which 
-            references quarterly breakdowns. Ensure all cost-benefit 
-            calculations align.
-```
-
-**Iteration 2 - Refinement:**
-- Writer **only rewrites** "Budget" section with specific feedback
-- New version: "Estimated investment: $75K, broken down as..."
-- Reviewer runs again - now passes ✓
-
-**Result:**
-- Document is internally consistent
-- No manual human intervention needed
-- Process took 2 automated refinement cycles
-
-### Why This Engineering Improvement Matters
-
-1. **Autonomous Problem Solving** - Agent catches and fixes its own inconsistencies
-2. **Precise Corrections** - Feedback targets specific issues, not vague "improve writing"
-3. **Efficiency** - Only problematic sections rewritten; rest unchanged
-4. **Explainability** - Each fix logged with the specific issue and solution
-5. **Safety** - Max 2 iterations prevents runaway loops while allowing recovery
-6. **Measurable Quality** - Quality scores improve across iterations
-
-### Metrics & Observability
-
-```json
-{
-  "review_iterations": 2,
-  "sections_refined": 2,
-  "quality_scores": {
-    "iteration_1": { "overall": 3.8, "consistency": 3 },
-    "iteration_2": { "overall": 4.8, "consistency": 5 }
-  },
-  "refinement_changes": {
-    "Budget": "Updated cost figure to match ROI section",
-    "Timeline": "Aligned sprint milestones with budget phases"
-  }
-}
-```
-
----
-
-## Component Details
-
-### 1. Planner Agent
-**Responsibility:** Create an execution plan
-
-**Input:** Natural language request  
-**Output:** ExecutionPlan (document type, assumptions, tasks, outline)
-
-**Key Features:**
-- Identifies document type (report, proposal, SOP, etc.)
-- Generates reasonable assumptions for missing information
-- Creates a TODO list with task dependencies
-- Builds section outline for the document
-
-**Prompt Strategy:** Structured generation requesting JSON output with schema validation
-
-### 2. Writer Agent
-**Responsibility:** Generate document content sections
-
-**Input:** Original request, execution plan, section index, previous sections  
-**Output:** DocumentSection (title, content, heading level)
-
-**Key Features:**
-- Writes ONE section at a time (never the entire document)
-- Maintains consistency with previously written sections
-- Professional, substantive writing
-- Structured JSON output for each section
-
-**Why Not One Prompt?** 
-- Prevents context window overload
-- Allows for real-time quality control
-- Enables review at intermediate stages
-- Better token efficiency
-
-### 3. Reviewer Agent
-**Responsibility:** Quality assurance and scoring
-
-**Capabilities:**
-1. **Document Review** - Checks for:
-   - Grammar and spelling errors
-   - Consistency (terminology, style)
-   - Structural and logical flow issues
-   - Professional tone
-
-2. **Quality Scoring** - Rates on 1-5 scale:
-   - Relevance to original request
-   - Completeness of coverage
-   - Coherence and logical flow
-   - Document structure
-   - Overall quality
-
-**Engineering Improvement:** 
-- Maximum 2 review iterations (prevents infinite loops)
-- Act as an LLM judge for quality metrics
-- Returns structured feedback for improvement
-
-### 4. Orchestrator
-**Responsibility:** Non-LLM business logic and coordination
-
-**Responsibilities:**
-- Initialize all agents and tools
-- Sequence execution (planner → writer → reviewer)
-- Pass outputs between agents
-- Call DOCX generator
-- Collect and aggregate metrics
-- Handle errors and logging
-- Build and return response
-
-**Key Design:**
-- No LLM calls directly
-- Pure Python business logic
-- Dependency injection for testability
-- Comprehensive error handling
-
-### 5. Tools Layer
-
-#### OllamaClient
-Encapsulates all HTTP communication with Ollama.
-
-```python
-# Simple interface hides complexity
-client = OllamaClient()
-result = client.generate(prompt)
-result = client.chat(messages)
-result = client.structured_generate(prompt, schema=json_schema)
-```
-
-**Features:**
-- Connection verification on init
-- Latency tracking
-- Token counting (when available)
-- Automatic retry logic
-- Structured output parsing (JSON extraction from LLM response)
-- Model availability checking
-
-#### DOCXGenerator
-Deterministic Word document creation. **Never uses LLM.**
-
-```python
-gen = DOCXGenerator()
-gen.create_document("Title")
-gen.add_heading("Section", level=1)
-gen.add_paragraph("Content")
-gen.add_bullet_list(["Item 1", "Item 2"])
-gen.add_table(rows=3, cols=2, data=[[...]])
-gen.save("output.docx")
-```
-
-**Supported Elements:**
-- Document titles
-- Headings (levels 1-3)
-- Paragraphs (bold, italic)
-- Bullet lists
-- Numbered lists
-- Tables (with data)
-- Page breaks
-
-**Professional Features:**
-- Consistent styling
-- Proper heading hierarchy
-- Business-appropriate formatting
-- Clean document structure
-
-#### MetricsCollector
-Aggregates execution metrics.
-
-**LLM Metrics (per call):**
-- Model name
-- Latency (ms)
-- Prompt tokens (optional)
-- Completion tokens (optional)
-- Total tokens (optional)
-
-**Pipeline Metrics:**
-- Planner latency
-- Writer latency
-- Reviewer latency
-- DOCX generation latency
-- Total execution time
-- Number of generated tasks
-- Review iterations
-- All LLM calls with metadata
-
-**Quality Metrics:**
-- Relevance score (1-5)
-- Completeness score (1-5)
-- Coherence score (1-5)
-- Structure score (1-5)
-- Overall score (1-5)
-
-## Installation
+This system demonstrates advanced AI engineering for educational technology:
+
+- Multi-agent orchestration (Planner, Writer, Reviewer)
+- Student state tracking and progress extraction from natural language
+- Curriculum-aware RAG with Milvus IVF clustering
+- Non-hallucinating document generation grounded in real curriculum data
+- Robust validation of study plans (no repetition, feasibility checks)
+- Iterative refinement with feedback loops
+- Production-grade metrics (ROUGE, BLEU, groundedness, feasibility)
+- DOCX document generation (deterministic, no LLM involved)
+
+## Quick Start
 
 ### Prerequisites
 
-1. **Ollama** - Local LLM service
-   ```bash
-   # Download from https://ollama.ai
-   # Or use package manager:
-   brew install ollama  # macOS
-   apt install ollama   # Linux
-   ```
+- Python 3.10+
+- Ollama installed and running locally
+- 4GB+ available RAM for local LLM
 
-2. **Python 3.10+**
+### Installation
 
-### Setup
-
-1. **Pull the model:**
-   ```bash
-   ollama pull qwen3:8b
-   ```
-
-2. **Start Ollama service:**
-   ```bash
-   ollama serve
-   # Runs on http://localhost:11434 by default
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   cd rag_app
-   pip install -r requirements.txt
-   ```
-
-4. **Verify Ollama is running:**
-   ```bash
-   curl http://localhost:11434/api/tags
-   # Should return list of available models
-   ```
-
-## Usage
-
-### Run the Server
+1. Install Python dependencies:
 
 ```bash
-# Development mode with auto-reload
-python main.py
-
-# Production mode
-uvicorn server.api:app --host 0.0.0.0 --port 8000 --workers 4
+pip install -r requirements.txt
 ```
 
-The API will be available at `http://localhost:8000`
+2. Install and start Ollama:
 
-### Using the Python Client
+Download from https://ollama.ai
+
+Run Ollama service:
+```bash
+ollama serve
+```
+
+3. Pull a language model (in another terminal):
+
+```bash
+ollama pull qwen2:7b
+```
+
+Or use any compatible Ollama model (llama2, mistral, neural-chat, etc.)
+
+4. Verify Ollama is running:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+Should return list of available models.
+
+### Running the Server
+
+```bash
+python server/api.py
+```
+
+Server starts on http://localhost:8000
+
+Test with:
+```bash
+curl http://localhost:8000/health
+```
+
+Response:
+```json
+{"status": "healthy"}
+```
+
+### Using the System
+
+Via Python client:
 
 ```python
-from client import create_client
+from lib.python_client import DocumentGenerationClient
+from server.models import StudentState
+from datetime import date, timedelta
 
-# Create client
-client = create_client("http://localhost:8000")
+client = DocumentGenerationClient("http://localhost:8000")
 
-# Generate document
-response = client.generate_document(
-    request="Create a technical specification for a REST API"
+# Create student state (optional, for personalized prep)
+state = StudentState(
+    student_id="student_001",
+    created_date=date.today(),
+    exam_deadline=date.today() + timedelta(days=90),
+    available_hours_per_day=6.0
 )
 
-# Access results
-print(f"Document: {response.document_filename}")
-print(f"Execution time: {response.metrics.total_execution_time_ms}ms")
-print(f"Quality: {response.quality_scores.overall}/5")
-print(f"Generated tasks: {response.metrics.num_generated_tasks}")
+# Request preparation plan
+response = client.generate(
+    request="I completed Algebra and Trigonometry. JEE exam January 2026. What should I prepare today?",
+    student_state=state
+)
+
+print(f"Document: {response['document_filename']}")
+print(f"Topics: {response['execution_plan']['outline']}")
 ```
 
-### Using cURL
+Via curl:
 
 ```bash
 curl -X POST http://localhost:8000/agent \
   -H "Content-Type: application/json" \
-  -d '{
-    "request": "Create a project proposal for a mobile app"
-  }'
+  -d '{"request": "Create a JEE mathematics study plan for one week"}'
 ```
 
-### Example Requests
+Response includes document filename, execution plan, and metrics.
 
-**Request 1: Technical Document**
-```json
-{
-  "request": "Create a technical specification for an OAuth 2.0 authentication system"
-}
-```
+## Architecture
 
-**Request 2: Business Document**
-```json
-{
-  "request": "Generate a business proposal for a cloud migration project"
-}
-```
+System Architecture Overview:
 
-**Request 3: Process Document**
-```json
-{
-  "request": "Write a comprehensive disaster recovery procedure document"
-}
-```
-
-## Response Format
-
-```json
-{
-  "success": true,
-  "document_filename": "document_20240115_143022.docx",
-  "execution_plan": {
-    "document_type": "Technical Specification",
-    "assumptions": {
-      "audience": "Technical architects",
-      "scope": "OAuth 2.0 implementation guide"
-    },
-    "tasks": [
-      {
-        "id": 1,
-        "description": "Research OAuth 2.0 specification",
-        "dependencies": []
-      }
-    ],
-    "outline": [
-      "Executive Summary",
-      "Technical Overview",
-      "Architecture",
-      "Implementation Details",
-      "Security Considerations",
-      "Conclusion"
-    ]
-  },
-  "assumptions": {
-    "audience": "Technical architects",
-    "scope": "OAuth 2.0 implementation guide"
-  },
-  "metrics": {
-    "planner_latency_ms": 3500.25,
-    "writer_latency_ms": 12500.75,
-    "reviewer_latency_ms": 2100.50,
-    "docx_generation_latency_ms": 150.25,
-    "total_execution_time_ms": 18250.75,
-    "num_generated_tasks": 8,
-    "review_iterations": 1,
-    "llm_calls": [
-      {
-        "model": "qwen3:8b",
-        "latency_ms": 3500.25,
-        "prompt_tokens": 1250,
-        "completion_tokens": 450,
-        "total_tokens": 1700
-      }
-    ]
-  },
-  "quality_scores": {
-    "relevance": 5,
-    "completeness": 4,
-    "coherence": 5,
-    "structure": 5,
-    "overall": 4
-  },
-  "message": "Document generated successfully"
-}
-```
-
-## Testing
-
-```bash
-# Run all tests
-pytest
-
-# With coverage report
-pytest --cov=. --cov-report=html
-
-# Specific test file
-pytest tests/test_agents.py -v
-
-# Run with markers
-pytest -m "not integration"
-```
-
-### Test Coverage
-
-- **test_ollama_client.py** - Ollama API wrapper (mocked HTTP calls)
-- **test_docx_generator.py** - Word document generation
-- **test_agents.py** - Planner, Writer, Reviewer agents
-- **test_api.py** - FastAPI endpoints
-- **Integration tests** - End-to-end workflows (mocked LLM)
-
-**Target:** 80%+ code coverage
-
----
-
-## RAG System: Curriculum-Based Document Generation
-
-### Overview
-
-The **RAG (Retrieval-Augmented Generation) system** transforms the document generator from generic content creation into **curriculum-aware planning**. Fetches real syllabuses (JEE, CBSE, courses), indexes them, retrieves relevant material, and generates documents based on actual educational content.
-
-### What It Does
-
-**Without RAG:**
-```
-User Request → Generic Plan → Generic Document ❌
-```
-
-**With RAG:**
-```
-User Request → Fetch Curriculum → Index Topics → Retrieve Relevant → Generate Document ✅
-```
+Input Request → Planner Agent → Writer Agent → Reviewer Agent → DOCX Output
 
 ### Components
 
-#### 1. Document Fetcher (`tools/document_fetcher.py`)
-Fetches educational materials with mock data (no internet required):
-- **JEE Advanced**: 35 chapters (Math, Physics, Chemistry), 420 hours
-- **CBSE Class 12**: Physics, Chemistry, Mathematics complete syllabus
-- **CBSE Class 10**: Science, Mathematics
-- **Programming Courses**: Python, Data Science, Web Development
+FastAPI Server (server/api.py)
+- REST endpoints: POST /agent, GET /health, GET /metrics
+- CORS enabled for frontend
+- Error handling and validation
+- 500 characters max request
 
-```python
-from tools import DocumentFetcher
+Orchestrator (server/orchestrator.py)
+- Coordinates multi-agent pipeline
+- Implements iterative refinement loop
+- Manages metrics collection
+- Non-LLM business logic
 
-fetcher = DocumentFetcher()
+Agent Layer:
+- PlannerAgent: Generates ExecutionPlan with document structure
+- WriterAgent: Writes document sections with RAG context
+- ReviewerAgent: Reviews for quality issues, scores output
+- StateAwarePlanner: Generates plans respecting student progress
 
-# Fetch curricula
-jee = fetcher.fetch_jee_full_curriculum()
-cbse12 = fetcher.fetch_syllabus("cbse_12")
-python_course = fetcher.fetch_course_material("Python Programming")
+Tools Layer:
+- OllamaClient: Structured LLM calls with schema validation
+- MilvusRAG: Vector database for curriculum search (mock mode fallback)
+- DOCXGenerator: Deterministic Word document creation
+- ProgressExtractor: NLP-based progress claim extraction
+- ProgressValidator: Feasibility validation (no repetition, time constraints)
+- DateUtils: Date parsing and scheduling utilities
+- MetricsCollector: Pipeline metrics (ROUGE, BLEU, groundedness)
+- EvaluationMetrics: Content quality scoring
 
-# Search documents
-results = fetcher.search_documents("calculus derivatives")
-```
+Models (server/models.py):
+- DocumentRequest / DocumentResponse
+- ExecutionPlan, Task, DocumentSection
+- StudentState, TopicProgress, ProgressClaim
+- ReviewFeedback, QualityScore, PipelineMetrics
 
-#### 2. Document Indexer (`tools/document_indexer.py`)
-Semantic search without external ML dependencies:
-- Vector-based similarity search
-- Persistent storage
-- Metadata tracking
+## Curriculum Data
 
-```python
-from tools import DocumentIndexer
+Complete subject syllabuses stored in server/data/curriculum_data.json:
 
-indexer = DocumentIndexer()
+CBSE Board (India):
+- Class 12: Physics, Chemistry, Mathematics (35-42 chapters each)
+- Class 10: Science (integrated), Mathematics
 
-# Add documents
-indexer.add_document("math_101", "Algebra, Calculus, Geometry...", {})
+Competitive Exams:
+- JEE Main (Math, Physics, Chemistry)
+- JEE Advanced (55 chapters across 3 subjects)
 
-# Search
-results = indexer.search("derivatives integrals", top_k=5)
-# Returns: [{doc_id, content, relevance_score, metadata}, ...]
+College Level:
+- Bachelor Physics Major (4 years)
+- Bachelor CS Major (4 years)
+- Mathematics Minor (24 credits)
+- Data Science Minor (24 credits)
 
-# Stats
-stats = indexer.get_index_stats()
-# {total_documents: 3, total_characters: 50000, indexed: true}
-```
+Each document contains complete syllabus with nested topics, metadata for IVF clustering (subject, level, class, difficulty).
 
-### Where Documents Are Stored
+## State & Progress Tracking
 
-```
-rag_app/
-├── document_cache/documents_index.json       # Cached syllabuses
-├── document_index/index.json                 # Indexed documents
-└── generated_documents/document_*.docx       # Generated output (one per request)
-```
+Student state tracks:
+- Learned topics (with completion dates, confidence levels 0-1)
+- Available study hours per day (default 6)
+- Learning velocity (topics/day, auto-calculated from history)
+- Exam deadline (for calculating days remaining)
 
-### Real-World Example: JEE Study Plan
+System automatically:
+- Extracts progress from natural language ("I completed Algebra", "spent 3 hours")
+- Updates student state with confidence levels (mastered=0.95, learned=0.85, covered=0.70)
+- Filters curriculum to exclude learned topics
+- Validates plans for feasibility and non-repetition
+- Returns validation issues if plan is unrealistic
 
-**User Request:**
-```
-"Create a JEE Math study plan for Relations and Functions - Day 1"
-```
+Example: User says "I finished Algebra today, spent 4 hours"
+System extracts: Algebra topic (confidence 0.95, 4 hours, today)
+System updates: StudentState with new learned topic
+System validates: Future plans won't include Algebra
 
-**System Flow:**
-1. ✅ Fetch JEE curriculum (35 chapters indexed)
-2. ✅ Retrieve: "Relations and Functions" topic
-3. ✅ Generate: Daily study plan with:
-   - Topics to cover (Domain, Range, Functions, Inverse)
-   - 20 JEE-level practice problems
-   - 30-minute self-test
-   - Time estimate: 6 hours
+## Execution Flow
 
-**Output File:**
-```
-generated_documents/document_20260708_143022.docx
-```
+Request → Progress Extraction → Exam Date Parsing → Curriculum Filtering → LLM Planning → Iterative Refinement → DOCX Generation
 
-**Quality Metrics:**
-- Relevance: 5/5 (directly from JEE syllabus)
-- Completeness: 5/5 (all topics covered)
-- Grounding: Based on actual curriculum ✅
+Step 1: Progress Extraction
+- Parses request text for progress claims
+- Detects mastery confidence levels
+- Updates student state
+- Fallback: Uses default state if no progress mentioned
 
-### Real-World Example: Daily CBSE TODO
+Step 2: Exam Date Extraction
+- Parses dates: "January 2026", "December 15, 2025"
+- Calculates days remaining
+- Sets preparation phases
+- Fallback: Uses 90-day default if no deadline specified
 
-**User Request:**
-```
-"Create TODO for CBSE Physics - Electrostatics - Today"
-```
+Step 3: Curriculum Filtering
+- Retrieves curriculum via Milvus RAG (mock mode fallback)
+- Excludes learned topics
+- Returns only available topics for study
+- Fallback: Returns all curriculum if filtering unavailable
 
-**System Output:**
-- Study: Electric field, Gauss's law, Potential
-- Solve: 10 numerical problems
-- Review: Key formulas
-- Self-test: 30 minutes
+Step 4: Plan Generation (Planner Agent)
+- Generates ExecutionPlan with document structure
+- Considers time constraints and daily load
+- Creates task dependencies
+- Builds outline of sections to write
 
-### Testing
+Step 5: Section Writing (Writer Agent)
+- Fetches curriculum context via RAG
+- Writes one section at a time
+- Includes curriculum references (non-hallucinating)
+- Maintains consistency with previous sections
 
-**22 comprehensive tests** covering:
-- Document fetching (JEE, CBSE, courses)
-- Document indexing & search
-- RAG-enabled document generation
-- Daily TODO creation from curriculum
-- Mock data validation
+Step 6: Review & Refinement (Reviewer Agent)
+- Reviews sections for quality issues
+- Scores document (relevance, completeness, coherence, structure)
+- Identifies specific section issues
+- Planner rewrites problematic sections with feedback
+
+Step 7: DOCX Generation
+- Converts structured output to Word document
+- Deterministic (no LLM involved)
+- Includes headings, paragraphs, bullet lists, tables
+- Saved with timestamp: document_YYYYMMDD_HHMMSS.docx
+
+Step 8: Metrics & Response
+- Collects latency metrics for each phase
+- Computes evaluation scores
+- Returns response with document filename and metadata
+
+## Fallback Handling
+
+When information is missing, system asks user and proceeds with defaults:
+
+Missing Exam Deadline:
+- Question: "What's your exam deadline? (e.g., January 2026)"
+- Fallback: 90-day default timeline
+- Impact: Uses generic phases instead of specific deadline
+
+Missing Student Progress:
+- Question: "What topics have you already completed?"
+- Fallback: Assumes no prior learning (all topics available)
+- Impact: May include repetition if user has learned some topics
+
+Missing Curriculum Data:
+- Question: "Should I fetch curriculum from online sources?"
+- Fallback: Uses mock curriculum data
+- Impact: Less personalized but still functional
+
+Unrealistic Study Plan:
+- Question: "Your plan requires X hours/day, but you set Y. Adjust plan?"
+- Options: Extend timeline, reduce topics, increase study hours
+- Default: Adjusts topics to fit available time
+
+Example Request with Fallbacks:
+
+User: "I want to prepare for JEE"
+
+System:
+1. Exam deadline: Not mentioned → Asks user or uses January 2026
+2. Current topics: Not mentioned → Assumes fresh start
+3. Study hours: Not specified → Uses 6 hours/day default
+4. Curriculum: Available in data/curriculum_data.json → Uses it
+5. Generates plan: "Your plan requires 8 topics/day for 90 days. Feasible at 6 hours/day."
+
+## Testing
+
+Run all tests:
 
 ```bash
-# Run RAG tests
-pytest tests/test_rag_document_generation.py -v
-# Expected: 22 passed ✅
-
-# Run specific category
-pytest tests/test_rag_document_generation.py::TestDocumentFetching -v
-pytest tests/test_rag_document_generation.py::TestDocumentIndexing -v
-pytest tests/test_rag_document_generation.py::TestRAGDocumentGeneration -v
+python -m pytest tests/ -v
 ```
 
-### Key Features
+Run specific test suite:
 
-✅ **No Internet Required** - Mock data works offline with complete curricula
-✅ **Semantic Search** - Find topics even with different wording  
-✅ **Curriculum-Aware** - Plans based on actual exam/course structure
-✅ **Persistent** - Documents and index cached between sessions
-✅ **Extensible** - Easy to add new courses/exams
-✅ **Well-Tested** - 22 test cases with all scenarios covered
+```bash
+python -m pytest tests/test_student_state.py -v
+python -m pytest tests/test_rag_document_generation.py -v
+python -m pytest tests/test_evaluation_metrics.py -v
+```
 
-### Metrics with RAG
+Test Coverage:
 
-| Metric | Without RAG | With RAG |
-|--------|------------|----------|
-| Document Relevance | 2/5 (generic) | 5/5 (curriculum-based) |
-| Content Grounding | 0% | 95%+ (based on actual syllabus) |
-| Topic Accuracy | Low (LLM hallucinations) | High (retrieved from curriculum) |
-| Personalization | None | Curriculum-specific |
+Student State Management: 4/4 tests
+Progress Extraction: 5/5 tests
+Validation: 2/3 tests
+Date Utils: 5/6 tests
+State-Aware Planning: 3/3 tests
+End-to-End Integration: 2/2 tests
+Curriculum Data: 3/3 tests
+Milvus RAG: 6/6 tests
+Evaluation Metrics: 34/34 tests
+Iterative Refinement: 5/5 tests
+─────────────────────────────────────────
+Total: 69/70 tests passing
 
----
+## Document Output
+
+Generated documents are saved in output/ directory:
+
+document_20260708_142530.docx
+
+Structure:
+- Title (Document Type)
+- Executive Summary (Assumptions)
+- Main Sections (from outline)
+  - Section heading
+  - Substantive content
+  - Consistent formatting
+- Page breaks between sections
+
+Example output for "JEE Mathematics 1-week prep":
+
+Title: JEE Mathematics 1-week Preparation Plan
+Assumptions: 
+  - Focus: Algebra, Trigonometry, Coordinate Geometry
+  - Duration: 7 days
+  - Study hours: 6 per day
+
+Sections:
+  1. Week Overview
+  2. Day 1: Algebra Fundamentals
+  3. Day 2: Advanced Algebra
+  4. ...and so on
+
+Document is ready for printing or sharing with students.
 
 ## Configuration
 
-### Environment Variables
+server/config.py:
 
-```bash
-# Ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:8b
-OLLAMA_TIMEOUT=300
+OLLAMA_HOST = "http://localhost:11434"
+MODEL_NAME = "qwen2:7b"
+MAX_REVIEW_ITERATIONS = 3
+DOCUMENT_OUTPUT_DIR = "output/"
 
-# Application
-LOG_LEVEL=INFO
+Adjustable settings:
+- model_name: Change to any available Ollama model
+- max_review_iterations: Fewer = faster, more = higher quality
+- document_output_dir: Where to save .docx files
+
+## Production Checklist
+
+For production deployment:
+
+Infrastructure:
+- Run Ollama on separate machine (GPU recommended)
+- Deploy FastAPI with Gunicorn: gunicorn server.api:app --workers 4
+- Use reverse proxy (Nginx) for SSL/TLS
+- Enable CORS only for trusted domains
+
+Database:
+- Deploy Milvus on separate instance for production
+- Current system uses mock mode (works without Milvus server)
+- For scaling: Configure Milvus with persistent storage
+
+Monitoring:
+- Collect metrics from /metrics endpoint
+- Track latency per agent phase
+- Monitor document quality scores
+- Set alerts: review_iterations >= 3 (quality issues)
+
+Rate Limiting:
+- API: 100 requests/hour per client
+- Document generation: 1 concurrent request per student
+
+Logging:
+- All LLM prompts and responses logged
+- Student progress updates logged
+- Document generation pipeline logged
+
+Security:
+- Validate requests (500 char max)
+- Sanitize student input in progress extraction
+- Rate limit API endpoints
+- Use API keys for production (not shown here)
+
+## Troubleshooting
+
+Ollama Connection Error:
+```
+Error: Could not connect to Ollama at http://localhost:11434
+Solution: ollama serve
 ```
 
-### Config File (config.py)
-
-```python
-@dataclass
-class OllamaConfig:
-    base_url: str = "http://localhost:11434"
-    model: str = "qwen3:8b"
-    timeout: int = 300
-
-@dataclass
-class AppConfig:
-    max_review_iterations: int = 2
-    document_output_dir: str = "generated_documents"
-    log_level: str = "INFO"
+Model Not Found:
+```
+Error: Model qwen2:7b not found
+Solution: ollama pull qwen2:7b
 ```
 
-## Logging
-
-Structured logging with consistent format:
-
+Milvus Connection Error:
 ```
-2024-01-15 14:30:22,123 - agents.planner - INFO - Planning document generation...
-2024-01-15 14:30:25,456 - tools.ollama_client - INFO - Generation completed in 3200.50ms
-2024-01-15 14:30:35,789 - agents.writer - INFO - Section written: Introduction (450 chars)
-2024-01-15 14:30:38,012 - agents.reviewer - INFO - Review passed - no issues found
-2024-01-15 14:30:38,234 - tools.docx_generator - INFO - Document saved: /path/to/document.docx
-2024-01-15 14:30:38,456 - orchestrator - INFO - DOCUMENT GENERATION COMPLETE
+Error: Milvus connection failed
+Note: System uses mock mode fallback, works without Milvus
+To use real Milvus: Install pymilvus and start Milvus server
 ```
 
-## Engineering Decisions
-
-### 1. Why Section-by-Section Writing?
-Rather than asking the LLM to write the entire document in one prompt:
-- **Token efficiency**: Smaller, focused prompts
-- **Quality control**: Review at intermediate stages
-- **Context window management**: Prevents overflow
-- **Real-time feedback**: Can course-correct during writing
-
-### 2. Separate Review Agent
-A dedicated agent for review provides:
-- **Modularity**: Can be easily extended
-- **Reusability**: Used for both checking and scoring
-- **Scalability**: Can be replaced with different review strategies
-- **Transparency**: Clear quality metrics
-
-### 3. No LLM in DOCX Generation
-The DOCX generator is purely deterministic:
-- **Reliability**: No randomness or variation
-- **Cost efficiency**: Saves LLM tokens
-- **Speed**: Direct file generation
-- **Testability**: Easy to unit test
-
-### 4. Orchestrator as Pure Logic
-Non-LLM orchestrator handles:
-- **Coordination**: Sequencing of agents
-- **Data flow**: Passing outputs between components
-- **Metrics**: Aggregation and collection
-- **Error handling**: Graceful degradation
-
-This keeps business logic separate from LLM concerns.
-
-### 5. Dependency Injection
-All components receive dependencies:
-```python
-planner = PlannerAgent(ollama_client)
-writer = WriterAgent(ollama_client)
+DOCX Not Created:
+```
+Error: Document saved to output/ but file not found
+Solution: Ensure output/ directory exists: mkdir output
 ```
 
-**Benefits:**
-- Easy to mock for testing
-- Loose coupling
-- Testable without real Ollama
-- Flexible runtime configuration
+Progress Extraction Not Working:
+```
+Issue: User says "I know algebra" but system doesn't detect it
+Reason: Extraction uses specific patterns (completed, finished, learned, mastered)
+Try: "I completed Algebra" or "I mastered Algebra"
+```
 
-### 6. Structured Output (JSON)
-LLM outputs are parsed as JSON:
-- **Type safety**: Schema validation
-- **Programmatic access**: Easy parsing
-- **Deterministic structure**: Reliable downstream processing
-- **Graceful error handling**: Clear validation errors
+## Project Structure
 
-## Production Considerations
+rag_app/
+├── server/
+│   ├── api.py (FastAPI server)
+│   ├── orchestrator.py (Pipeline coordinator)
+│   ├── models.py (Pydantic models)
+│   ├── config.py (Settings)
+│   ├── logger.py (Logging setup)
+│   ├── exceptions.py (Custom exceptions)
+│   ├── agents/
+│   │   ├── planner.py (Planning agent)
+│   │   ├── writer.py (Writing agent with RAG)
+│   │   ├── reviewer.py (Review agent)
+│   │   └── state_aware_planner.py (Progress-aware planning)
+│   ├── tools/
+│   │   ├── ollama_client.py (LLM interface)
+│   │   ├── milvus_rag.py (Vector database)
+│   │   ├── docx_generator.py (Word document creation)
+│   │   ├── progress_extractor.py (NLP for progress)
+│   │   ├── date_utils.py (Date parsing and scheduling)
+│   │   ├── metrics.py (Metrics collection)
+│   │   └── evaluation_metrics.py (ROUGE, BLEU, etc.)
+│   └── data/
+│       └── curriculum_data.json (10 complete subject syllabuses)
+├── tests/
+│   ├── test_agents.py (Agent unit tests)
+│   ├── test_student_state.py (Progress tracking tests)
+│   ├── test_rag_document_generation.py (RAG tests)
+│   ├── test_milvus_rag.py (Vector DB tests)
+│   ├── test_evaluation_metrics.py (Metrics tests)
+│   └── ...and 5 more test files
+├── client/ (Frontend HTML/CSS/JS)
+├── lib/
+│   └── python_client.py (Python client library)
+├── output/ (Generated DOCX files)
+└── README.md (this file)
 
-### For Deployment
+## Requirements
 
-1. **Scaling:**
-   - Run multiple API server instances behind a load balancer
-   - Use a queue (Celery, RQ) for long-running document generations
-   - Cache Ollama responses for repeated requests
+Python 3.10+:
+- fastapi, uvicorn (API server)
+- pydantic (Data validation)
+- python-docx (Word document generation)
+- pymilvus (optional, for production Vector DB)
+- requests (HTTP client)
+- pytest (Testing)
 
-2. **Monitoring:**
-   - Track metrics endpoint for performance
-   - Log to centralized system (ELK, Datadog)
-   - Monitor Ollama service health
-   - Alert on error rates
+See requirements.txt for exact versions.
 
-3. **Error Handling:**
-   - Graceful degradation on Ollama failure
-   - Timeout handling
-   - Retry logic with exponential backoff
-   - Circuit breaker pattern
+## Metrics & Evaluation
 
-4. **Optimization:**
-   - Batch similar requests
-   - Cache generated plans
-   - Reuse sections from similar documents
-   - Pre-warm Ollama with smaller models
+Pipeline collects:
+- Planner latency (ms)
+- Writer latency (ms)
+- Reviewer latency (ms)
+- DOCX generation latency (ms)
+- Total execution time (ms)
+- Review iterations (count)
+- Quality scores (1-5): relevance, completeness, coherence, structure, overall
 
-## SOLID Principles Applied
+Content metrics:
+- ROUGE-1, ROUGE-2, ROUGE-L (recall-oriented)
+- BLEU 1-4 grams with brevity penalty
+- Groundedness (content supported by curriculum)
+- Context utilization (% of retrieved context used)
+- Semantic similarity (embedding-based)
 
-- **Single Responsibility:** Each agent has one job
-- **Open/Closed:** Easy to add new agents or review strategies
-- **Liskov Substitution:** Agents have consistent interfaces
-- **Interface Segregation:** Small, focused interfaces
-- **Dependency Inversion:** Depend on abstractions (OllamaClient interface)
+Query metrics:
+- Exam deadline extraction accuracy
+- Progress extraction precision/recall
+- Plan feasibility validation rate
+- Non-repetition validation success
+
+## Implementation Notes
+
+Why This Architecture:
+
+Multi-agent approach: Each agent has single responsibility (planning, writing, reviewing)
+Separates concerns and allows independent improvement
+
+Local Ollama: Privacy, speed, cost (no API bills)
+Trade-off: Lower quality than API models, but suitable for education
+
+Milvus RAG: IVF clustering enables semantic search
+Curriculum data organized by subject, class, level for effective retrieval
+
+Mock mode fallback: Tests run without Milvus server
+Production-ready: Upgrades to real Milvus with one config change
+
+Iterative refinement: Reviews catch issues, writer fixes them
+Improves output quality without exponential LLM costs
+
+Progress extraction: NLP-based, not requiring database queries
+Fast, works offline, user-friendly natural language interface
+
+DOCX generation: Deterministic, not LLM-generated
+Guarantees output quality and reproducibility
 
 ## Future Enhancements
 
-1. **Advanced RAG:** Integrate vector DB for context-aware writing
-2. **Multi-model support:** Use different models for different agents
-3. **Document templates:** Pre-defined structures for common document types
-4. **Image support:** Add images/charts to generated documents
-5. **Async processing:** Non-blocking API calls
-6. **Caching layer:** Cache generated plans and sections
-7. **Custom prompts:** User-provided templates and instructions
-8. **Batch processing:** Generate multiple documents in parallel
+Student Dashboard:
+- View learning history
+- Track progress over time
+- Compare actual vs planned study
+
+Spaced Repetition:
+- Calculate optimal revision dates
+- Remind users to revise learned topics
+- Adjust confidence based on revision performance
+
+Adaptive Difficulty:
+- Adjust topic order based on student performance
+- Recommend harder topics when student excels
+- Provide easier prerequisites when struggling
+
+Interactive Feedback:
+- User rates quality of generated plans
+- System learns from feedback
+- Improves future recommendations
+
+Mobile App:
+- Access study plans on phone
+- Log progress in real-time
+- Offline mode with cached curriculum
+
+Teacher Dashboard:
+- Monitor class progress
+- Assign study plans to students
+- Track engagement metrics
+
+## Contact & Support
+
+For issues, feature requests, or contributions:
+
+1. Check Troubleshooting section above
+2. Review test cases for expected behavior
+3. Enable DEBUG logging in server/logger.py for verbose output
+4. Report issues with: request text, student state, expected output, actual output
 
 ## License
 
-MIT License
-
-## Author
-
-Created as a portfolio project demonstrating AI engineering excellence.
+Educational use. See LICENSE file.

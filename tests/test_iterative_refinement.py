@@ -3,8 +3,8 @@
 from unittest.mock import Mock, patch
 import pytest
 
-from orchestrator import Orchestrator
-from models import (
+from server.orchestrator import Orchestrator
+from server.models import (
     DocumentRequest,
     DocumentSection,
     ExecutionPlan,
@@ -17,7 +17,7 @@ from models import (
 class TestIterativeRefinement:
     """Test the iterative refinement feature."""
 
-    @patch("orchestrator.OllamaClient")
+    @patch("server.orchestrator.OllamaClient")
     def test_refinement_identifies_section_issues(self, mock_ollama_class):
         """Test that refinement correctly identifies which sections have issues."""
         mock_client = Mock()

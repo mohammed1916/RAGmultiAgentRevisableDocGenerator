@@ -4,7 +4,7 @@ Tests ROUGE, BLEU, groundedness, context utilization, and semantic similarity.
 """
 
 import pytest
-from tools.evaluation_metrics import ContentEvaluator
+from server.tools.evaluation_metrics import ContentEvaluator
 
 
 class TestROUGE:

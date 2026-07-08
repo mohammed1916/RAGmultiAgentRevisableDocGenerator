@@ -4,6 +4,7 @@ import json
 from typing import Dict, List, Optional
 
 from ..tools.ollama_client import OllamaClient
+from ..tools.milvus_rag import MilvusRAG
 from ..models import DocumentSection, ExecutionPlan
 from ..exceptions import WriterException
 from ..logger import setup_logger
@@ -14,13 +15,15 @@ logger = setup_logger(__name__)
 class WriterAgent:
     """Agent responsible for writing document sections."""
 
-    def __init__(self, ollama_client: OllamaClient):
+    def __init__(self, ollama_client: OllamaClient, rag_system: Optional[MilvusRAG] = None):
         """Initialize the Writer Agent.
 
         Args:
             ollama_client: OllamaClient instance
+            rag_system: Optional MilvusRAG instance for curriculum context
         """
         self.client = ollama_client
+        self.rag = rag_system or MilvusRAG()  # Initialize default RAG if not provided
 
     def write_section(
         self,
@@ -137,6 +140,9 @@ class WriterAgent:
         Returns:
             Formatted prompt
         """
+        # Fetch relevant curriculum context from RAG
+        rag_context = self._fetch_rag_context(request, section_title, plan.document_type)
+
         if revision_feedback:
             prompt = f"""You are an expert technical writer revising a document section based on reviewer feedback.
 
@@ -177,6 +183,9 @@ Write this section in a professional, clear manner. The content should be:
 
 """
 
+        if rag_context:
+            prompt += f"\nRELEVANT CURRICULUM CONTEXT (from curriculum database):\n{rag_context}\n"
+
         if previous_sections:
             prompt += "\nPreviously written sections for context:\n"
             for prev in previous_sections:
@@ -189,6 +198,35 @@ Return the section as JSON with:
 - heading_level: 2 for main sections, 3 for subsections"""
 
         return prompt
+
+    def _fetch_rag_context(self, request: str, section_title: str, doc_type: str) -> str:
+        """Fetch relevant curriculum context from RAG system.
+
+        Args:
+            request: User request
+            section_title: Current section title
+            doc_type: Document type
+
+        Returns:
+            Formatted RAG context or empty string if no results
+        """
+        try:
+            # Search for relevant curriculum data
+            search_query = f"{request} {section_title}"
+            results = self.rag.search(search_query, top_k=3)
+
+            if not results:
+                return ""
+
+            context = "Retrieved curriculum references:\n"
+            for i, result in enumerate(results, 1):
+                context += f"\n{i}. {result['doc_id']}:\n"
+                context += f"   {result['content'][:300]}...\n"
+
+            return context
+        except Exception as e:
+            logger.warning(f"RAG context fetch failed: {e}")
+            return ""
 
     @staticmethod
     def _format_dict(d: Dict[str, str]) -> str:

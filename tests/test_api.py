@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from models import (
+from server.models import (
     DocumentRequest,
     DocumentResponse,
     ExecutionPlan,
@@ -151,7 +151,7 @@ def test_generate_document_invalid_request(mock_orchestrator_class):
 @patch("server.api.Orchestrator")
 def test_generate_document_server_error(mock_orchestrator_class):
     """Test document generation with server error."""
-    from exceptions import DocumentGenerationException
+    from server.exceptions import DocumentGenerationException
 
     mock_orchestrator = MagicMock()
     mock_orchestrator.generate_document.side_effect = DocumentGenerationException(

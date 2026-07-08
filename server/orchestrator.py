@@ -9,6 +9,7 @@ from .agents.planner import PlannerAgent
 from .agents.writer import WriterAgent
 from .agents.reviewer import ReviewerAgent
 from .tools.ollama_client import OllamaClient
+from .tools.milvus_rag import MilvusRAG
 from .tools.docx_generator import DOCXGenerator
 from .tools.metrics import MetricsCollector
 from .models import (
@@ -32,8 +33,9 @@ class Orchestrator:
     def __init__(self):
         """Initialize the orchestrator."""
         self.ollama_client = OllamaClient()
+        self.rag_system = MilvusRAG()  # Initialize RAG for curriculum context
         self.planner = PlannerAgent(self.ollama_client)
-        self.writer = WriterAgent(self.ollama_client)
+        self.writer = WriterAgent(self.ollama_client, rag_system=self.rag_system)
         self.reviewer = ReviewerAgent(self.ollama_client)
         self.docx_generator = DOCXGenerator()
         self.metrics = MetricsCollector()

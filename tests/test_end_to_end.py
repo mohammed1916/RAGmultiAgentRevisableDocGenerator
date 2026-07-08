@@ -3,15 +3,15 @@
 from unittest.mock import Mock, patch
 import pytest
 
-from orchestrator import Orchestrator
-from models import DocumentRequest
+from server.orchestrator import Orchestrator
+from server.models import DocumentRequest
 
 
 class TestStandardBusinessRequest:
     """Test Input 1: Standard, well-defined business request."""
 
-    @patch("tools.ollama_client.requests.get")
-    @patch("tools.ollama_client.requests.post")
+    @patch("server.tools.ollama_client.requests.get")
+    @patch("server.tools.ollama_client.requests.post")
     def test_standard_project_plan_request(self, mock_post, mock_get):
         """
         TEST INPUT 1: Standard Request

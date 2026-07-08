@@ -4,9 +4,9 @@ import os
 import tempfile
 import pytest
 
-from tools.docx_generator import DOCXGenerator
-from models import DocumentSection, DocumentStructure
-from exceptions import DOCXGenerationException
+from server.tools.docx_generator import DOCXGenerator
+from server.models import DocumentSection, DocumentStructure
+from server.exceptions import DOCXGenerationException
 
 
 class TestDOCXGenerator:

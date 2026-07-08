@@ -1,0 +1,163 @@
+[
+  {
+    "id": "cbse_12_physics_complete",
+    "content": "CBSE Class 12 Physics Complete Syllabus. Unit 1: Electrostatics - Electric charges, Coulomb's law, electric field, electric potential, capacitance, dielectrics. Unit 2: Current Electricity - Electric current, circuits, resistance, EMF, current density, Ohm's law. Unit 3: Magnetic Effects of Current - Magnetic field, Lorentz force, circular motion in magnetic field, electromagnetic induction. Unit 4: Waves and Oscillations - Simple harmonic motion, damping, forced oscillations, wave motion, sound waves, Doppler effect. Unit 5: Optics - Reflection, refraction, lenses, mirrors, interference, diffraction, polarization, fiber optics. Unit 6: Modern Physics - Atomic structure, photoelectric effect, Bohr model, X-rays, nucleus, radioactivity, nuclear fission and fusion.",
+    "document_type": "syllabi",
+    "metadata": {
+      "subject": "Physics",
+      "class": "12",
+      "board": "CBSE",
+      "level": "secondary_upper",
+      "chapters": 35,
+      "marks": 70,
+      "units": ["Electrostatics", "Current Electricity", "Magnetism", "Waves", "Optics", "Modern Physics"],
+      "major_topics": ["Electric Field", "Circuits", "Magnetic Force", "Wave Motion", "Lens Formula", "Atomic Structure"]
+    }
+  },
+  {
+    "id": "cbse_12_chemistry_complete",
+    "content": "CBSE Class 12 Chemistry Complete Syllabus. Unit 1: Solid State - Crystal structures, unit cells, packing, defects, ionic compounds. Unit 2: Solutions - Types of solutions, concentration, colligative properties, osmosis. Unit 3: Electrochemistry - Redox reactions, electrodes, cells, electrolysis, Faraday's laws. Unit 4: Chemical Kinetics - Rate of reaction, order, activation energy, catalysts, reaction mechanisms. Unit 5: Surface Chemistry - Adsorption, colloids, emulsions, catalysis. Unit 6: General Principles of Isolation of Metals - Occurrence, concentration, extraction, refining. Unit 7: p-Block Elements - Nitrogen, phosphorus, oxygen, sulfur, halogens, noble gases. Unit 8: d-Block Elements - Transition metals, coordination chemistry, oxidation states, complex formation. Unit 9: f-Block Elements - Lanthanides, actinides, properties. Unit 10: Organic Compounds - Hydrocarbons, functional groups, polymers, amino acids, proteins. Unit 11: Aldehydes, Ketones, Carboxylic Acids - Reactions, synthesis. Unit 12: Amines - Structure, preparation, properties.",
+    "document_type": "syllabi",
+    "metadata": {
+      "subject": "Chemistry",
+      "class": "12",
+      "board": "CBSE",
+      "level": "secondary_upper",
+      "chapters": 42,
+      "marks": 70,
+      "units": ["Solid State", "Solutions", "Electrochemistry", "Kinetics", "Surface Chemistry", "Metal Isolation", "p-Block", "d-Block", "f-Block", "Organic Chemistry"],
+      "major_topics": ["Ionic Bonding", "Redox Reactions", "Complex Formation", "Organic Synthesis", "Polymers"]
+    }
+  },
+  {
+    "id": "cbse_12_maths_complete",
+    "content": "CBSE Class 12 Mathematics Complete Syllabus. Unit 1: Relations and Functions - Relations, functions, types of functions, inverse functions, composition. Unit 2: Inverse Trigonometric Functions - Domain, range, properties, graphs. Unit 3: Matrices - Types, operations, determinants, inverse, rank. Unit 4: Determinants - Properties, cofactors, adjoint, cramer's rule. Unit 5: Continuity and Differentiability - Limits, continuity, derivatives, chain rule, implicit differentiation. Unit 6: Applications of Derivatives - Increasing/decreasing functions, maxima/minima, concavity, curve sketching. Unit 7: Integrals - Indefinite integrals, integration by substitution, by parts, by partial fractions. Unit 8: Definite Integrals - Properties, fundamental theorem, applications. Unit 9: Applications of Integrals - Area under curves, volumes, differential equations. Unit 10: Vector Algebra - Vectors, addition, scalar product, cross product, applications. Unit 11: Three Dimensional Geometry - Lines, planes, distance formulas, angles. Unit 12: Probability - Random variables, probability distributions, expectation, variance.",
+    "document_type": "syllabi",
+    "metadata": {
+      "subject": "Mathematics",
+      "class": "12",
+      "board": "CBSE",
+      "level": "secondary_upper",
+      "chapters": 40,
+      "marks": 80,
+      "units": ["Functions", "Trigonometry", "Matrices", "Calculus", "Geometry", "Probability"],
+      "major_topics": ["Derivatives", "Integration", "Vectors", "3D Geometry", "Probability"]
+    }
+  },
+  {
+    "id": "cbse_10_science_complete",
+    "content": "CBSE Class 10 Science Complete Syllabus. Physics Topics: Motion and force (kinematics, Newton's laws, work, energy, power), Sound (nature, properties, speed, echoes, SONAR), Light (reflection, refraction, lens formula, power of lens, dispersion). Chemistry Topics: Chemical reactions and equations (types, balancing, precipitate, displacement), Acids bases and salts (properties, pH scale, neutralization), Metals and non-metals (properties, occurrence, uses, extraction, corrosion, protection), Carbon and compounds (allotropes, bonding, combustion, organic compounds), Periodic classification (periodic table trends, groups, periods). Biology Topics: Life processes (nutrition, respiration, transportation, excretion), Control and coordination (nervous system, hormones, feedback mechanisms), Reproduction (in plants and animals, fertilization), Heredity and evolution (inheritance, Mendel's laws, evolution).",
+    "document_type": "syllabi",
+    "metadata": {
+      "subject": "Science (Integrated)",
+      "class": "10",
+      "board": "CBSE",
+      "level": "secondary_lower",
+      "marks": 80,
+      "sections": ["Physics", "Chemistry", "Biology"],
+      "major_topics": ["Motion", "Chemical Reactions", "Life Processes", "Reproduction"]
+    }
+  },
+  {
+    "id": "cbse_10_maths_complete",
+    "content": "CBSE Class 10 Mathematics Complete Syllabus. Unit 1: Real Numbers - Integers, rationals, Euclid's algorithm, prime factorization, irrational numbers. Unit 2: Polynomials - Degree, zeros, remainder theorem, factor theorem, algebraic identities. Unit 3: Pair of Linear Equations - Graphical and algebraic methods (substitution, elimination), consistency. Unit 4: Quadratic Equations - Solving by factorization, completing square, quadratic formula, discriminant, applications. Unit 5: Arithmetic Progressions - Nth term, sum of n terms, arithmetic mean. Unit 6: Triangles - Similarity, basic proportionality theorem, angle bisector theorem, Pythagorean theorem. Unit 7: Coordinate Geometry - Distance formula, section formula, area of triangle. Unit 8: Introduction to Trigonometry - Trigonometric ratios, trigonometric identities, complementary angles. Unit 9: Some Applications of Trigonometry - Heights and distances. Unit 10: Circles - Tangents, secants, cyclic quadrilaterals. Unit 11: Constructions - Geometric constructions. Unit 12: Areas Related to Circles - Area and circumference, arc length, sector area. Unit 13: Surface Areas and Volumes - Spheres, cones, cylinders, combination of shapes. Unit 14: Statistics - Mean, median, mode, variance, standard deviation. Unit 15: Probability - Theoretical and experimental probability, sample space.",
+    "document_type": "syllabi",
+    "metadata": {
+      "subject": "Mathematics",
+      "class": "10",
+      "board": "CBSE",
+      "level": "secondary_lower",
+      "marks": 80,
+      "units": ["Numbers", "Algebra", "Geometry", "Trigonometry", "Statistics", "Probability"],
+      "major_topics": ["Polynomials", "Quadratic Equations", "Similarity", "Trigonometry", "Circles"]
+    }
+  },
+  {
+    "id": "jee_mains_complete",
+    "content": "JEE Main Complete Syllabus for Engineering Entrance. Mathematics: Quadratic equations, complex numbers, sequences and series, permutations and combinations, binomial theorem, matrices and determinants, function and inverse function, limits and continuity, differentiability, derivatives, applications of derivatives, indefinite integration, definite integrals, areas, differential equations, straight line and pair of lines, circles, conic sections, 3D coordinate geometry, vectors, trigonometric functions and equations. Physics: Units and measurements, kinematics, laws of motion, work and energy, rotational motion, gravitation, elasticity, surface tension, viscosity, heat and thermodynamics, oscillations, waves, electrostatics, current electricity, magnetic effects and magnetism, electromagnetic induction, alternating current, electromagnetic waves, ray and wave optics, modern physics (photoelectric effect, atoms and nuclei, semiconductors). Chemistry: Basic concepts of chemistry, atomic structure, chemical bonding, molecular structure, states of matter, solutions, redox reactions, thermodynamics, equilibrium, kinetics, surface chemistry, general organic chemistry, hydrocarbons, organic compounds with functional groups, polymers, environmental chemistry.",
+    "document_type": "syllabi",
+    "metadata": {
+      "exam": "JEE Main",
+      "level": "competitive_engineering",
+      "duration_months": 12,
+      "total_marks": 300,
+      "sections": ["Mathematics", "Physics", "Chemistry"],
+      "total_chapters": 45,
+      "difficulty": "High",
+      "major_topics": ["Calculus", "Coordinate Geometry", "Mechanics", "Electromagnetism", "Organic Chemistry", "Redox Reactions"]
+    }
+  },
+  {
+    "id": "jee_advanced_complete",
+    "content": "JEE Advanced Complete Syllabus. Mathematics: Algebra (inequalities, complex numbers, sequences, summation, quadratic equations, permutations, binomial theorem, logarithms), Trigonometry, Coordinate Geometry (locus, circles, parabola, ellipse, hyperbola), Calculus (limits, continuity, derivatives, integrals, differential equations, applications), Vectors and 3D Geometry. Physics: Mechanics (kinematics, Newton's laws, work-energy, circular motion, rigid body dynamics, gravitation, elasticity, fluid mechanics, oscillations), Waves and Thermodynamics (wave motion, sound, heat, thermodynamics), Electrostatics (Coulomb's law, electric field, potential, conductors, dielectrics, capacitance), Current Electricity (Ohm's law, circuits, EMF), Magnetism and Electromagnetic Induction (magnetic field, Lorentz force, induction, transformers), Optics (reflection, refraction, lenses, mirrors, interference, diffraction, polarization), Modern Physics (photoelectric effect, atomic structure, X-rays, nuclear physics, semiconductors). Chemistry: Organic (reactions mechanisms, synthesis, natural products), Inorganic (bonding, general principles, block elements, coordination chemistry), Physical (equilibrium, thermodynamics, electrochemistry, kinetics, surface chemistry, solutions).",
+    "document_type": "syllabi",
+    "metadata": {
+      "exam": "JEE Advanced",
+      "level": "competitive_engineering_advanced",
+      "duration_months": 12,
+      "total_marks": 360,
+      "sections": ["Mathematics", "Physics", "Chemistry"],
+      "total_chapters": 55,
+      "difficulty": "Very High",
+      "major_topics": ["Advanced Calculus", "Coordinate Geometry", "Quantum Mechanics", "Modern Optics", "Coordination Chemistry"]
+    }
+  },
+  {
+    "id": "college_majors_physics",
+    "content": "College Physics Major Complete Curriculum - Degree Programme. Year 1: Classical Mechanics (kinematics, dynamics, conservation laws, oscillations, waves), Electricity and Magnetism (electrostatics, magnetostatics, Maxwell equations, electromagnetic waves), Mathematical Physics (linear algebra, differential equations, vector calculus, complex analysis), Thermodynamics and Statistical Mechanics (temperature, heat, entropy, quantum statistics). Year 2: Quantum Mechanics (wave functions, Schrödinger equation, perturbation theory, angular momentum), Waves and Optics (geometrical optics, wave optics, interference, diffraction), Atomic Physics (hydrogen atom, multi-electron atoms, spectroscopy), Computational Physics (programming, numerical methods, simulations). Year 3: Solid State Physics (crystal structure, band theory, semiconductors, superconductors), Nuclear Physics (nuclear structure, radioactivity, reactions, detectors), Particle Physics (standard model, weak interactions), Advanced Quantum Mechanics (time-dependent processes, scattering, identical particles). Year 4: Research Project, Condensed Matter Physics, High Energy Physics, Or Astrophysics and Cosmology (stellar evolution, galaxies, cosmology, black holes).",
+    "document_type": "syllabi",
+    "metadata": {
+      "level": "tertiary_major",
+      "subject": "Physics",
+      "degree": "Bachelor",
+      "years": 4,
+      "credits": 180,
+      "core_courses": 24,
+      "electives": 12,
+      "major_topics": ["Classical Mechanics", "Quantum Mechanics", "Electromagnetism", "Thermodynamics", "Solid State Physics", "Particle Physics"]
+    }
+  },
+  {
+    "id": "college_majors_computer_science",
+    "content": "College Computer Science Major Complete Curriculum - Degree Programme. Year 1: Programming Fundamentals (Python, Java, algorithms, data structures), Discrete Mathematics (logic, set theory, graphs, combinatorics), Computer Architecture (digital logic, processors, memory, I/O), Introduction to CS (computational thinking, problem solving). Year 2: Object-Oriented Programming, Database Systems (SQL, design, normalization, transactions), Web Development (frontend, backend, frameworks), Software Engineering (design patterns, testing, version control). Year 3: Algorithms and Complexity (sorting, searching, dynamic programming, NP-completeness), Operating Systems (processes, memory management, file systems, concurrency), Networking (TCP/IP, DNS, HTTP, security protocols), Artificial Intelligence (machine learning, neural networks, NLP). Year 4: Specialization Tracks - Systems (distributed systems, cloud computing, security), Applications (graphics, games, multimedia), Theory (formal languages, computability, complexity theory), Or Intelligence (deep learning, computer vision, reinforcement learning). Capstone Project in chosen specialization.",
+    "document_type": "syllabi",
+    "metadata": {
+      "level": "tertiary_major",
+      "subject": "Computer Science",
+      "degree": "Bachelor",
+      "years": 4,
+      "credits": 180,
+      "core_courses": 20,
+      "electives": 14,
+      "major_topics": ["Programming", "Algorithms", "Databases", "Systems", "AI/ML", "Software Engineering"]
+    }
+  },
+  {
+    "id": "college_minors_mathematics",
+    "content": "College Mathematics Minor Complete Curriculum. Required Courses: Calculus I and II (limits, derivatives, integrals, series), Linear Algebra (matrices, vector spaces, eigenvalues), Discrete Mathematics (logic, sets, graphs, counting). Advanced Mathematics Options (choose 3): Real Analysis (completeness, continuity, convergence), Abstract Algebra (groups, rings, fields), Probability and Statistics (distributions, hypothesis testing, regression), Differential Equations (ordinary and partial), Numerical Analysis (approximation, computation, error analysis), Geometry (Euclidean, projective, differential), Topology (metric spaces, continuity, compactness). Total Credits: 24 (usually 8 core + 16 advanced). Suitable for students in Physics, Engineering, Computer Science, Chemistry, Economics who need strong mathematical foundation.",
+    "document_type": "syllabi",
+    "metadata": {
+      "level": "tertiary_minor",
+      "subject": "Mathematics",
+      "degree": "Minor",
+      "credits": 24,
+      "core_courses": 3,
+      "electives": 3,
+      "major_topics": ["Calculus", "Linear Algebra", "Discrete Math", "Real Analysis", "Abstract Algebra"]
+    }
+  },
+  {
+    "id": "college_minors_data_science",
+    "content": "College Data Science Minor Complete Curriculum. Core Courses: Python Programming for Data Science, Statistics and Probability, Data Structures and Algorithms, Linear Algebra for Data Science, Databases (SQL and NoSQL). Specialized Courses (choose 3): Machine Learning (supervised, unsupervised, evaluation), Data Visualization (storytelling, dashboards, interactive plots), Big Data Systems (Hadoop, Spark, distributed computing), Time Series Analysis (forecasting, ARIMA, Prophet), Deep Learning (neural networks, CNNs, RNNs), Applied Statistics (experimental design, A/B testing, causal inference), Natural Language Processing (text processing, embeddings, transformers). Capstone Project: Real-world data analysis or predictive modeling. Total Credits: 24. Suitable for students in Computer Science, Engineering, Mathematics, Economics, Science who want data expertise.",
+    "document_type": "syllabi",
+    "metadata": {
+      "level": "tertiary_minor",
+      "subject": "Data Science",
+      "degree": "Minor",
+      "credits": 24,
+      "core_courses": 5,
+      "electives": 3,
+      "major_topics": ["Python", "Statistics", "Machine Learning", "Data Visualization", "Big Data"]
+    }
+  }
+]

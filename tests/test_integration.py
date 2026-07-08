@@ -5,16 +5,16 @@ import pytest
 import tempfile
 import os
 
-from orchestrator import Orchestrator
-from models import DocumentRequest
-from tools.docx_generator import DOCXGenerator
+from server.orchestrator import Orchestrator
+from server.models import DocumentRequest
+from server.tools.docx_generator import DOCXGenerator
 
 
 class TestEndToEndDocumentGeneration:
     """End-to-end integration tests with mocked LLM."""
 
-    @patch("tools.ollama_client.requests.get")
-    @patch("tools.ollama_client.requests.post")
+    @patch("server.tools.ollama_client.requests.get")
+    @patch("server.tools.ollama_client.requests.post")
     def test_full_document_generation_workflow(self, mock_post, mock_get):
         """Test complete document generation from request to DOCX output."""
         # Mock Ollama connection

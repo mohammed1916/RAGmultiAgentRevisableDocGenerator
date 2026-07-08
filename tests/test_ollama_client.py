@@ -4,14 +4,14 @@ import json
 from unittest.mock import Mock, patch
 import pytest
 
-from tools.ollama_client import OllamaClient
-from exceptions import OllamaException, OllamaConnectionException
+from server.tools.ollama_client import OllamaClient
+from server.exceptions import OllamaException, OllamaConnectionException
 
 
 class TestOllamaClient:
     """Test cases for OllamaClient."""
 
-    @patch("tools.ollama_client.requests.get")
+    @patch("server.tools.ollama_client.requests.get")
     def test_initialization_success(self, mock_get):
         """Test successful initialization."""
         mock_get.return_value.json.return_value = {"models": []}
