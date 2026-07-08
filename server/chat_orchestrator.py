@@ -141,20 +141,19 @@ Options for this request:"""
         # If user just answered subject, fetch curriculum topics
         if question_key == "subject":
             try:
-                rag = MilvusRAG()
-                results = rag.search_documents(answer, top_k=10)
+                results = self.rag.search_documents(answer, top_k=15)
                 topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(results)]
 
-                if topics:
-                    # Create dynamic question with actual topics from curriculum
+                if topics and len(topics) > 0:
+                    # Create question with actual topics from curriculum
                     topics_question = ClarifyingQuestion(
-                        question=f"Which topics from {answer} do you want to cover? (Select all that apply)",
+                        question=f"Which topics from {answer} do you want to cover? (You can type multiple, comma-separated)",
                         key="topics",
-                        options=topics[:8],  # Show up to 8 topics
+                        options=topics[:10],  # Show up to 10 topics as suggestions
                         required=True,
                     )
 
-                    response_text = f"Great! I found {len(topics)} topics in the {answer} curriculum.\nLet me show you what's available..."
+                    response_text = f"Perfect! I found {len(topics)} topics in the {answer} curriculum.\n\nSelect the topics you want to cover:"
                     context.conversation.append(
                         ChatMessage(role="assistant", content=response_text)
                     )
@@ -166,11 +165,54 @@ Options for this request:"""
                         is_ready_to_generate=False,
                         next_action="ask_more",
                     )
+                else:
+                    # No topics found, ask user to specify
+                    logger.warning(f"No topics found for: {answer}")
+                    response_text = f"I couldn't find specific topics for '{answer}' in the curriculum.\n\nPlease tell me which topics you want to cover (you can type them):"
+                    context.conversation.append(
+                        ChatMessage(role="assistant", content=response_text)
+                    )
+
+                    topics_question = ClarifyingQuestion(
+                        question="Which topics do you want to cover?",
+                        key="topics",
+                        options=None,  # Let user type
+                        required=True,
+                    )
+
+                    return ChatResponse(
+                        message=response_text,
+                        questions=[topics_question],
+                        context=context,
+                        is_ready_to_generate=False,
+                        next_action="ask_more",
+                    )
             except Exception as e:
-                logger.warning(f"RAG fetch failed: {e}")
+                logger.error(f"RAG fetch failed: {e}")
+                # Fallback: ask user to specify topics
+                response_text = f"I had trouble finding topics for '{answer}'. Please tell me which topics you want to cover:"
+                context.conversation.append(
+                    ChatMessage(role="assistant", content=response_text)
+                )
+
+                topics_question = ClarifyingQuestion(
+                    question="Which topics do you want to cover?",
+                    key="topics",
+                    options=None,
+                    required=True,
+                )
+
+                return ChatResponse(
+                    message=response_text,
+                    questions=[topics_question],
+                    context=context,
+                    is_ready_to_generate=False,
+                    next_action="ask_more",
+                )
 
         # Standard flow for other answers
-        required_answers = ["subject", "deadline", "topics"]
+        # Order: subject → topics → deadline → generate
+        required_answers = ["subject", "topics", "deadline"]
         answered = sum(1 for k in required_answers if k in context.answers)
         is_ready = answered >= len(required_answers)
 
@@ -203,24 +245,27 @@ Options for this request:"""
                 ChatMessage(role="assistant", content=response_text)
             )
 
-            # Generate next question dynamically
+            # Generate next question dynamically based on what's missing
             next_questions = []
-            if "deadline" not in context.answers:
-                next_questions.append(
-                    ClarifyingQuestion(
-                        question="What's your deadline? (e.g., '3 weeks', 'December 2024', '90 days')",
-                        key="deadline",
-                        options=None,  # Let user type their own deadline
-                        required=True,
-                    )
-                )
-            elif "topics" not in context.answers:
-                # Will be handled when fetching from RAG
+
+            if "topics" not in context.answers:
+                # Topics should be asked after subject (handled above)
+                # This is fallback in case topics wasn't fetched
                 next_questions.append(
                     ClarifyingQuestion(
                         question="Which topics do you want to cover? (type or select from suggestions)",
                         key="topics",
                         options=None,
+                        required=True,
+                    )
+                )
+            elif "deadline" not in context.answers:
+                # Ask deadline after we have subject and topics
+                next_questions.append(
+                    ClarifyingQuestion(
+                        question="What's your deadline? (e.g., '3 weeks', 'December 2024', '50 days')",
+                        key="deadline",
+                        options=None,  # Let user type their own deadline
                         required=True,
                     )
                 )
