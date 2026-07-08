@@ -1,6 +1,7 @@
 """Chat-based document generation orchestrator.
 
 Handles conversational flow with clarifying questions before generation.
+Uses RAG to fetch curriculum and ask context-aware questions.
 """
 
 from typing import List, Optional, Dict
@@ -12,6 +13,7 @@ from .models import (
     ChatContext,
     ChatResponse,
 )
+from .tools.milvus_rag import MilvusRAG
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -20,30 +22,30 @@ logger = setup_logger(__name__)
 class ChatOrchestrator:
     """Manages chat-based document generation workflow."""
 
-    # Default clarifying questions for document generation
-    DEFAULT_QUESTIONS = [
+    # Initial questions to determine subject/class
+    INITIAL_QUESTIONS = [
         ClarifyingQuestion(
-            question="Who is the target audience for this document?",
-            key="audience",
-            options=["Executive", "Technical", "General", "Mixed"],
+            question="What are you studying? (Class/Level/Subject)",
+            key="subject",
+            options=["Class 10 Science", "Class 12 Physics", "Class 12 Chemistry",
+                    "Class 12 Math", "JEE Main", "JEE Advanced", "College Level"],
             required=True,
         ),
         ClarifyingQuestion(
-            question="What's the desired length/scope?",
-            key="scope",
-            options=["Brief (1-3 pages)", "Detailed (5-10 pages)", "Comprehensive (10+ pages)"],
+            question="What's your exam/completion deadline?",
+            key="deadline",
+            options=["1 week", "1 month", "3 months", "6 months"],
             required=True,
         ),
+    ]
+
+    # Fallback generic questions if no RAG context
+    GENERIC_QUESTIONS = [
         ClarifyingQuestion(
             question="What tone would you prefer?",
             key="tone",
             options=["Formal", "Professional but conversational", "Casual"],
             required=True,
-        ),
-        ClarifyingQuestion(
-            question="Any specific sections or areas to include?",
-            key="sections",
-            required=False,
         ),
     ]
 
@@ -71,11 +73,11 @@ class ChatOrchestrator:
             ChatMessage(role="user", content=request)
         )
 
-        # Generate clarifying questions
-        questions = self.DEFAULT_QUESTIONS
+        # Use curriculum-aware initial questions
+        questions = self.INITIAL_QUESTIONS
         response_text = (
-            f"I'll help you create this document. Let me ask a few clarifying questions first:\n\n"
-            f"Initial request: {request}"
+            f"I'm your study scheduling agent! Let me understand what you're studying:\n\n"
+            f"Your request: {request}"
         )
 
         context.conversation.append(
@@ -108,29 +110,55 @@ class ChatOrchestrator:
 
         # Add to conversation
         context.conversation.append(
-            ChatMessage(role="user", content=f"[Answer to {question_key}]: {answer}")
+            ChatMessage(role="user", content=f"{answer}")
         )
 
-        # Check if we have enough information
-        required_questions = [q for q in self.DEFAULT_QUESTIONS if q.required]
-        answered = sum(1 for q in required_questions if q.key in context.answers)
-        is_ready = answered >= len(required_questions)
+        # If user just answered subject, fetch curriculum topics
+        if question_key == "subject":
+            try:
+                rag = MilvusRAG()
+                results = rag.search_documents(answer, top_k=10)
+                topics = [r.get("title", f"Topic {i+1}") for i, r in enumerate(results)]
+
+                if topics:
+                    # Create dynamic question with actual topics from curriculum
+                    topics_question = ClarifyingQuestion(
+                        question=f"Which topics from {answer} do you want to cover? (Select all that apply)",
+                        key="topics",
+                        options=topics[:8],  # Show up to 8 topics
+                        required=True,
+                    )
+
+                    response_text = f"Great! I found {len(topics)} topics in the {answer} curriculum.\nLet me show you what's available..."
+                    context.conversation.append(
+                        ChatMessage(role="assistant", content=response_text)
+                    )
+
+                    return ChatResponse(
+                        message=response_text,
+                        questions=[topics_question],
+                        context=context,
+                        is_ready_to_generate=False,
+                        next_action="ask_more",
+                    )
+            except Exception as e:
+                logger.warning(f"RAG fetch failed: {e}")
+
+        # Standard flow for other answers
+        required_answers = ["subject", "deadline", "topics"]
+        answered = sum(1 for k in required_answers if k in context.answers)
+        is_ready = answered >= len(required_answers)
 
         context.is_ready_to_generate = is_ready
-
-        # Calculate confidence
-        confidence = min(1.0, len(context.answers) / len(self.DEFAULT_QUESTIONS))
-        context.confidence_level = confidence
+        context.confidence_level = min(1.0, answered / len(required_answers))
 
         if is_ready:
             response_text = (
-                f"Great! I have enough information.\n\n"
-                f"Document will be:\n"
-                f"- Audience: {context.answers.get('audience', 'Not specified')}\n"
-                f"- Scope: {context.answers.get('scope', 'Not specified')}\n"
-                f"- Tone: {context.answers.get('tone', 'Not specified')}\n"
-                f"- Sections: {context.answers.get('sections', 'Standard structure')}\n\n"
-                f"Ready to generate your document!"
+                f"Perfect! I have everything I need:\n\n"
+                f"📚 Subject: {context.answers.get('subject', 'N/A')}\n"
+                f"⏰ Deadline: {context.answers.get('deadline', 'N/A')}\n"
+                f"📖 Topics: {context.answers.get('topics', 'N/A')}\n\n"
+                f"Ready to create your study schedule!"
             )
             context.conversation.append(
                 ChatMessage(role="assistant", content=response_text)
@@ -144,19 +172,15 @@ class ChatOrchestrator:
             )
         else:
             # Ask remaining questions
-            remaining = [
-                q for q in self.DEFAULT_QUESTIONS
-                if q.required and q.key not in context.answers
-            ]
-
-            response_text = f"Thanks! {len(context.answers)}/{len(self.DEFAULT_QUESTIONS)} details captured."
+            remaining_keys = [k for k in required_answers if k not in context.answers]
+            response_text = f"Got it! {answered}/{len(required_answers)} pieces of information collected."
             context.conversation.append(
                 ChatMessage(role="assistant", content=response_text)
             )
 
             return ChatResponse(
                 message=response_text,
-                questions=remaining[:2],  # Show next 2 questions
+                questions=None,  # Let frontend know to continue asking
                 context=context,
                 is_ready_to_generate=False,
                 next_action="ask_more",
