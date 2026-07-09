@@ -2,6 +2,10 @@
 
 import os
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load .env file for Cloud Ollama and other config
+load_dotenv()
 
 
 @dataclass
