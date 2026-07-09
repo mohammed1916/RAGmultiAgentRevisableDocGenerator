@@ -109,6 +109,10 @@ class WriterAgent:
         Raises:
             WriterException: If any section writing fails
         """
+        # Special handling for todo lists
+        if plan.document_type.lower() == "todo list":
+            return self._generate_todo_section(request, plan)
+
         sections = []
 
         for i, section_title in enumerate(plan.outline):
@@ -119,6 +123,75 @@ class WriterAgent:
 
         logger.info(f"All {len(sections)} sections written")
         return sections
+
+    def _generate_todo_section(self, request: str, plan: ExecutionPlan) -> List[DocumentSection]:
+        """Generate a simple todo table from plan tasks.
+
+        Args:
+            request: Original request
+            plan: ExecutionPlan with tasks
+
+        Returns:
+            List with single DocumentSection containing todo table
+        """
+        logger.info("Generating todo list from plan tasks")
+
+        # Build markdown table
+        markdown = "| # | Task | Priority | Deadline | Hours |\n"
+        markdown += "|---|------|----------|----------|-------|\n"
+
+        for task in plan.tasks:
+            task_id = task.id
+            description = task.description.replace("|", "\\|")[:50]
+            # Infer priority from task description or use Medium as default
+            priority = self._infer_priority(task.description)
+            deadline = plan.assumptions.get("deadline", "1 week")
+            hours = self._estimate_hours(task.description)
+
+            markdown += f"| {task_id} | {description} | {priority} | {deadline} | {hours} |\n"
+
+        section = DocumentSection(
+            title="Priority Todo List",
+            content=markdown,
+            heading_level=1
+        )
+
+        logger.info(f"Todo section generated with {len(plan.tasks)} items")
+        return [section]
+
+    @staticmethod
+    def _infer_priority(description: str) -> str:
+        """Infer priority from task description.
+
+        Args:
+            description: Task description
+
+        Returns:
+            Priority level (High, Medium, Low)
+        """
+        desc_lower = description.lower()
+        if any(word in desc_lower for word in ["critical", "urgent", "asap", "immediately", "high"]):
+            return "High"
+        elif any(word in desc_lower for word in ["low", "optional", "later", "secondary"]):
+            return "Low"
+        return "Medium"
+
+    @staticmethod
+    def _estimate_hours(description: str) -> int:
+        """Estimate task duration in hours.
+
+        Args:
+            description: Task description
+
+        Returns:
+            Estimated hours
+        """
+        desc_lower = description.lower()
+        if any(word in desc_lower for word in ["quick", "simple", "brief", "small"]):
+            return 1
+        elif any(word in desc_lower for word in ["complex", "detailed", "comprehensive", "extensive"]):
+            return 8
+        return 4
 
     def _build_writing_prompt(
         self,

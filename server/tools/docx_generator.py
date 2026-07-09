@@ -92,6 +92,53 @@ class DOCXGenerator:
 
         logger.debug(f"Added paragraph ({len(text)} chars)")
 
+    def add_markdown_section(self, markdown_text: str) -> None:
+        """Add markdown content as properly formatted DOCX elements.
+
+        Parses markdown and creates appropriate DOCX elements:
+        - Headers → Heading styles
+        - Tables → DOCX tables
+        - Lists → DOCX bullet/numbered lists
+        - Paragraphs → Normal paragraphs with inline formatting
+
+        Args:
+            markdown_text: Markdown-formatted text
+        """
+        if not self.doc:
+            raise DOCXGenerationException("Document not initialized.")
+
+        blocks = MarkdownFormatter.parse_blocks(markdown_text)
+
+        for block in blocks:
+            block_type = block.get('type')
+
+            if block_type == 'heading':
+                self.add_heading(block['text'], level=min(block['level'], 3))
+
+            elif block_type == 'table':
+                rows = block['rows']
+                if rows:
+                    cols = max(len(row) for row in rows) if rows else 1
+                    self.add_table(len(rows), cols, rows)
+
+            elif block_type == 'bullet_list':
+                self.add_bullet_list(block['items'])
+
+            elif block_type == 'numbered_list':
+                self.add_numbered_list(block['items'])
+
+            elif block_type == 'paragraph':
+                self.add_paragraph(block['text'])
+
+            elif block_type == 'code_block':
+                # Add code block as monospace paragraph
+                para = self.doc.add_paragraph(block.get('code', ''), style='Normal')
+                for run in para.runs:
+                    run.font.name = 'Courier New'
+                    run.font.size = Pt(10)
+
+        logger.debug(f"Added markdown section with {len(blocks)} blocks")
+
     def add_bullet_list(self, items: List[str]) -> None:
         """Add a bulleted list with markdown formatting support.
 
@@ -198,6 +245,7 @@ class DOCXGenerator:
         for section in structure.sections:
             if section.heading_level > 0:
                 self.add_heading(section.title, section.heading_level)
-            self.add_paragraph(section.content)
+            # Use markdown section parser to properly handle headers, tables, lists
+            self.add_markdown_section(section.content)
 
         logger.info(f"Document built from structure with {len(structure.sections)} sections")

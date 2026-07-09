@@ -109,21 +109,26 @@ class PlannerAgent:
         Returns:
             Formatted prompt
         """
-        return f"""You are an expert document planning agent. Analyze this request and create a comprehensive execution plan.
+        return f"""You are a todo list planning agent. Analyze this request and create a prioritized todo list.
 
 Request: {request}
 
-Generate an execution plan that includes:
-1. Document type classification
-2. Key assumptions (fill in missing information reasonably)
-3. Ordered list of tasks to complete the document
-4. Document outline
+Generate a todo plan that includes:
+1. Document type: "Todo List"
+2. Assumptions: Any reasonable assumptions about deadlines/context
+3. Tasks: Individual todo items with priorities
+4. Outline: Section names for the final document
 
 For the tasks, provide:
 - Unique task IDs (starting from 1)
-- Clear descriptions
-- Dependencies (other task IDs this task depends on)
+- Description (the actual todo item)
+- Dependencies (task IDs this depends on, if any)
 
-For outline, provide a list of section titles that will appear in the final document.
+Each task should be:
+- Specific and actionable
+- Have an implied priority (High/Medium/Low based on urgency)
+- Realistic deadline
 
-Return the plan as JSON."""
+Example task: "Complete project analysis"
+
+Return the plan as JSON with these exact fields."""

@@ -1,13 +1,90 @@
 """Convert markdown formatting to DOCX run formatting."""
 
 import re
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 from docx.oxml import OxmlElement
 from docx.shared import Pt, RGBColor
 
 
 class MarkdownFormatter:
     """Parse and apply markdown formatting to DOCX paragraphs."""
+
+    @staticmethod
+    def parse_blocks(text: str) -> List[Dict[str, Any]]:
+        """Parse markdown into block-level elements.
+
+        Returns list of dicts with 'type' and content:
+        - {'type': 'heading', 'level': 1-6, 'text': ...}
+        - {'type': 'table', 'rows': [...]}
+        - {'type': 'paragraph', 'text': ...}
+        - {'type': 'bullet_list', 'items': [...]}
+        - {'type': 'numbered_list', 'items': [...]}
+        - {'type': 'code_block', 'code': ...}
+        """
+        blocks = []
+        lines = text.split('\n')
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+
+            # Skip empty lines
+            if not line.strip():
+                i += 1
+                continue
+
+            # Check for headers
+            header_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+            if header_match:
+                level = len(header_match.group(1))
+                text_content = header_match.group(2).strip()
+                blocks.append({'type': 'heading', 'level': level, 'text': text_content})
+                i += 1
+                continue
+
+            # Check for tables
+            if line.strip().startswith('|'):
+                table_rows = []
+                while i < len(lines) and lines[i].strip().startswith('|'):
+                    row_text = lines[i].strip()
+                    # Parse row: |col1|col2|col3|
+                    cells = [cell.strip() for cell in row_text.split('|')[1:-1]]
+                    # Skip separator rows (---)
+                    if not all(c.replace('-', '').replace(' ', '') == '' for c in cells):
+                        table_rows.append(cells)
+                    i += 1
+
+                if table_rows:
+                    blocks.append({'type': 'table', 'rows': table_rows})
+                continue
+
+            # Check for bullet lists
+            bullet_match = re.match(r'^[-*]\s+(.+)$', line)
+            if bullet_match:
+                items = []
+                while i < len(lines) and re.match(r'^[-*]\s+(.+)$', lines[i]):
+                    match = re.match(r'^[-*]\s+(.+)$', lines[i])
+                    items.append(match.group(1))
+                    i += 1
+                blocks.append({'type': 'bullet_list', 'items': items})
+                continue
+
+            # Check for numbered lists
+            numbered_match = re.match(r'^\d+\.\s+(.+)$', line)
+            if numbered_match:
+                items = []
+                while i < len(lines) and re.match(r'^\d+\.\s+(.+)$', lines[i]):
+                    match = re.match(r'^\d+\.\s+(.+)$', lines[i])
+                    items.append(match.group(1))
+                    i += 1
+                blocks.append({'type': 'numbered_list', 'items': items})
+                continue
+
+            # Default: paragraph
+            blocks.append({'type': 'paragraph', 'text': line.strip()})
+            i += 1
+
+        return blocks
 
     @staticmethod
     def parse_markdown_text(text: str) -> List[Tuple[str, dict]]:

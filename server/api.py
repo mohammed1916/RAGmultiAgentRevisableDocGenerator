@@ -9,10 +9,12 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest
+from .models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest, DocumentStructure
 from .orchestrator import Orchestrator
 from .chat_orchestrator import ChatOrchestrator
 from .langgraph_orchestrator import LangGraphOrchestrator
+from .agents.todo_generator import TodoGenerator
+from .tools.docx_generator import DOCXGenerator
 from .exceptions import DocumentGenerationException
 from .logger import setup_logger
 
@@ -37,6 +39,7 @@ app.add_middleware(
 orchestrator = None
 chat_orchestrator = ChatOrchestrator()
 langgraph_orchestrator = None
+todo_generator = TodoGenerator()
 
 # Store chat sessions
 chat_sessions = {}
@@ -345,6 +348,59 @@ async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
         raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
 
 
+@app.post("/todo")
+async def generate_todo_list(request: DocumentRequest) -> DocumentResponse:
+    """Generate a prioritized todo list.
+
+    Args:
+        request: Request with task description
+
+    Returns:
+        DOCX with todo table
+    """
+    if not request.request or not request.request.strip():
+        raise HTTPException(status_code=400, detail="Request cannot be empty")
+
+    logger.info(f"Generating todo list: {request.request[:100]}...")
+
+    try:
+        # Generate todos using LLM
+        todos = todo_generator.generate_todos(request.request)
+
+        if not todos:
+            raise DocumentGenerationException("Failed to generate todos")
+
+        # Create document section
+        todo_section = todo_generator.create_todo_document_section(todos)
+
+        # Build DOCX
+        docx_gen = DOCXGenerator()
+        structure = DocumentStructure(
+            title="Todo List",
+            sections=[todo_section]
+        )
+        docx_gen.from_structure(structure)
+
+        # Save
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"todos_{timestamp}.docx"
+        filepath = os.path.join("output", filename)
+
+        document_path = docx_gen.save(filepath)
+        logger.info(f"Todo list generated: {filename}")
+
+        return DocumentResponse(
+            success=True,
+            document_filename=filename,
+            request=request.request,
+            message=f"Generated {len(todos)} todo items"
+        )
+
+    except Exception as e:
+        logger.error(f"Todo generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -354,7 +410,8 @@ async def root():
         "architecture": "LangGraph orchestration with LangChain agents",
         "endpoints": {
             "POST /agent": "Generate document from natural language request (custom orchestration)",
-            "POST /agent/langgraph": "Generate document using LangGraph state machine + LangChain agents (NEW)",
+            "POST /agent/langgraph": "Generate document using LangGraph state machine + LangChain agents",
+            "POST /todo": "Generate simple priority todo list (NEW - simple endpoint)",
             "POST /chat/start": "Start chatbot conversation with clarifying questions",
             "POST /chat/answer": "Answer a clarifying question in chat",
             "POST /chat/generate": "Generate document after chat completion",
@@ -363,17 +420,8 @@ async def root():
             "GET /files": "List all generated documents",
             "GET /download/{filename}": "Download a document",
         },
-        "chat_workflow": {
-            "step1": "POST /chat/start - User sends initial request",
-            "step2": "POST /chat/answer - User answers clarifying questions (repeat as needed)",
-            "step3": "POST /chat/generate - Generate document when ready (uses LangGraph)",
-        },
-        "langgraph_features": {
-            "orchestration": "State machine with Plan → Write → Review nodes",
-            "agents": "LangChain tool-calling agents for autonomous loops",
-            "llm": "Local Ollama (qwen3:8b by default)",
-            "state_management": "LangGraph's add_messages reducer",
-            "conditional_routing": "Iterative review with feedback loops",
+        "todo_workflow": {
+            "simple": "POST /todo - Quick priority todo list generation"
         }
     }
 

@@ -71,38 +71,41 @@ class Orchestrator:
             write_latency = (time.time() - write_start) * 1000
             self.metrics.record_writer_execution(write_latency)
 
-            # Step 3: Review with Iterative Refinement
-            logger.info("=" * 50)
-            logger.info("PHASE 3: Review & Iterative Refinement")
-            logger.info("=" * 50)
-            review_start = time.time()
+            # Step 3: Review with Iterative Refinement (skip for todo lists)
             review_iterations = 0
+            if plan.document_type.lower() == "todo list":
+                logger.info("Skipping review for todo list - simple format doesn't need iteration")
+            else:
+                logger.info("=" * 50)
+                logger.info("PHASE 3: Review & Iterative Refinement")
+                logger.info("=" * 50)
+                review_start = time.time()
 
-            for iteration in range(1, config.max_review_iterations + 1):
-                logger.info(f"Review iteration {iteration}")
-                feedback = self.reviewer.review_document(plan.document_type, sections)
+                for iteration in range(1, config.max_review_iterations + 1):
+                    logger.info(f"Review iteration {iteration}")
+                    feedback = self.reviewer.review_document(plan.document_type, sections)
 
-                if not feedback.has_issues:
-                    logger.info("Review passed - no issues found ✓")
-                    break
-                else:
-                    logger.warning(f"Issues found - refining document...")
-                    review_iterations = iteration
-
-                    if iteration < config.max_review_iterations:
-                        # Iterative refinement: Fix specific sections based on feedback
-                        logger.info(f"Fixing {len(feedback.section_feedback)} sections with issues...")
-                        sections = self._refine_sections(
-                            doc_request.request, plan, sections, feedback
-                        )
+                    if not feedback.has_issues:
+                        logger.info("Review passed - no issues found ✓")
+                        break
                     else:
-                        logger.warning(
-                            f"Max review iterations ({config.max_review_iterations}) reached. "
-                            "Proceeding with current document."
-                        )
+                        logger.warning(f"Issues found - refining document...")
+                        review_iterations = iteration
 
-            review_latency = (time.time() - review_start) * 1000
-            self.metrics.record_reviewer_execution(review_latency, review_iterations)
+                        if iteration < config.max_review_iterations:
+                            # Iterative refinement: Fix specific sections based on feedback
+                            logger.info(f"Fixing {len(feedback.section_feedback)} sections with issues...")
+                            sections = self._refine_sections(
+                                doc_request.request, plan, sections, feedback
+                            )
+                        else:
+                            logger.warning(
+                                f"Max review iterations ({config.max_review_iterations}) reached. "
+                                "Proceeding with current document."
+                            )
+
+                review_latency = (time.time() - review_start) * 1000
+                self.metrics.record_reviewer_execution(review_latency, review_iterations)
 
             # Step 4: Quality Scoring
             logger.info("Scoring document quality...")
