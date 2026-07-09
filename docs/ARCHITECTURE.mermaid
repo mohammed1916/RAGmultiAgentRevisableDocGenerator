@@ -1,0 +1,47 @@
+graph TB
+
+subgraph Frontend
+    UI["Chat Interface"]
+    Files["Generated Files"]
+end
+
+subgraph Backend
+    ChatAPI["Chat API"]
+    FileAPI["File API"]
+end
+
+subgraph Orchestrator
+    ChatOrch["ChatOrchestrator"]
+    MultiOrch["Multi-Agent Orchestrator"]
+end
+
+subgraph Agents
+    Planner
+    Writer
+    Reviewer
+end
+
+subgraph Tools
+    Ollama
+    Milvus
+    Markdown
+    DOCX
+end
+
+UI --> ChatAPI
+ChatAPI --> ChatOrch
+ChatAPI --> MultiOrch
+
+MultiOrch --> Planner
+MultiOrch --> Writer
+MultiOrch --> Reviewer
+
+Planner --> Ollama
+Writer --> Ollama
+Reviewer --> Ollama
+
+Writer --> Milvus
+Writer --> Markdown
+Markdown --> DOCX
+Files --> FileAPI
+FileAPI --> DOCX

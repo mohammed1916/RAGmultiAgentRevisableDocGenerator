@@ -1,0 +1,34 @@
+sequenceDiagram
+    participant User
+    participant ChatOrch
+    participant Planner
+    participant Writer
+    participant Reviewer
+    participant Ollama
+    participant Milvus
+    participant DOCX
+
+    User->>ChatOrch: Start conversation
+    ChatOrch->>Ollama: Generate response
+    Ollama-->>ChatOrch: Questions
+    ChatOrch-->>User: Gather information
+
+    User->>ChatOrch: Provide answers
+    ChatOrch->>Ollama: Continue
+    Ollama-->>ChatOrch: Ready
+    ChatOrch-->>User: Ready to generate
+
+    ChatOrch->>Planner: Create plan
+    Planner->>Ollama: LLM call
+    Ollama-->>Planner: Plan
+
+    Planner->>Writer: Write document
+    Writer->>Milvus: Retrieve context
+    Writer->>Ollama: Generate content
+    Ollama-->>Writer: Sections
+
+    Writer->>Reviewer: Review
+    Reviewer->>Ollama: Quality check
+    Ollama-->>Reviewer: Approved
+
+    Reviewer->>DOCX: Generate document
