@@ -79,6 +79,9 @@ Generate conversational, helpful responses. Never force the user to choose betwe
         # Check if LLM determined we're ready
         is_ready = self._check_if_ready(context)
 
+        # Update context.is_ready_to_generate so it's included in the response
+        context.is_ready_to_generate = is_ready
+
         return ChatResponse(
             message=response_text,
             session_id=None,  # Set by API
@@ -119,6 +122,9 @@ Generate conversational, helpful responses. Never force the user to choose betwe
 
         # Check if LLM indicated it's ready
         is_ready = self._check_if_ready(context)
+
+        # Update context.is_ready_to_generate so it's included in the response
+        context.is_ready_to_generate = is_ready
 
         if is_ready:
             return ChatResponse(
