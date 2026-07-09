@@ -162,9 +162,10 @@ class OllamaClient:
     def structured_generate(
         self, prompt: str, schema: Optional[Dict[str, Any]] = None, **kwargs
     ) -> Dict[str, Any]:
-        """Generate structured output (JSON).
+        """Generate structured output (JSON) with retry on parse failure.
 
         The function appends JSON schema instructions to the prompt.
+        If JSON parsing fails, retries with error feedback to the LLM.
 
         Args:
             prompt: Input prompt
@@ -176,41 +177,67 @@ class OllamaClient:
         """
         if schema:
             schema_str = json.dumps(schema, indent=2)
-            full_prompt = (
+            base_prompt = (
                 f"{prompt}\n\n"
                 f"Return ONLY valid JSON matching this schema:\n"
                 f"{schema_str}"
             )
         else:
-            full_prompt = (
+            base_prompt = (
                 f"{prompt}\n\n"
                 "Return ONLY valid JSON. No other text."
             )
 
-        result = self.generate(full_prompt, **kwargs)
+        # Retry up to 2 times on JSON parse failure
+        max_retries = 2
+        last_error = None
 
-        try:
-            # Extract JSON from response
-            response_text = result.get("response", "").strip()
+        for attempt in range(max_retries):
+            if attempt == 0:
+                full_prompt = base_prompt
+            else:
+                # On retry, include error feedback
+                full_prompt = (
+                    f"{base_prompt}\n\n"
+                    f"PREVIOUS ATTEMPT FAILED with error:\n{last_error}\n\n"
+                    "Please fix this and return ONLY valid JSON with proper escaping. "
+                    "Ensure all backslashes are properly escaped (use \\\\ for literal backslash)."
+                )
 
-            # Try to find JSON in the response
-            start_idx = response_text.find("{")
-            end_idx = response_text.rfind("}") + 1
+            result = self.generate(full_prompt, **kwargs)
 
-            if start_idx == -1 or end_idx == 0:
-                raise ValueError("No JSON found in response")
+            try:
+                # Extract JSON from response
+                response_text = result.get("response", "").strip()
 
-            json_str = response_text[start_idx:end_idx]
-            parsed = json.loads(json_str)
+                # Try to find JSON in the response
+                start_idx = response_text.find("{")
+                end_idx = response_text.rfind("}") + 1
 
-            result["parsed_response"] = parsed
-            logger.info("Structured generation successful")
-            return result
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Failed to parse JSON response: {str(e)}")
-            raise OllamaException(
-                f"Failed to parse structured response as JSON: {str(e)}"
-            )
+                if start_idx == -1 or end_idx == 0:
+                    raise ValueError("No JSON found in response")
+
+                json_str = response_text[start_idx:end_idx]
+                parsed = json.loads(json_str)
+
+                result["parsed_response"] = parsed
+                if attempt > 0:
+                    logger.info(f"Structured generation successful (retry {attempt})")
+                else:
+                    logger.info("Structured generation successful")
+                return result
+            except (json.JSONDecodeError, ValueError) as e:
+                last_error = str(e)
+                logger.warning(
+                    f"JSON parse attempt {attempt + 1} failed: {last_error}. "
+                    f"Retrying..." if attempt < max_retries - 1 else "Max retries reached."
+                )
+                if attempt == max_retries - 1:
+                    # Last attempt failed
+                    logger.error(f"Failed to parse JSON after {max_retries} attempts: {last_error}")
+                    raise OllamaException(
+                        f"Failed to parse structured response as JSON after {max_retries} attempts: {last_error}"
+                    )
 
     def is_model_available(self, model: str = None) -> bool:
         """Check if a model is available.
