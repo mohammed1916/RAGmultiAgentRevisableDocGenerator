@@ -47,51 +47,49 @@ This system demonstrates advanced AI engineering for educational technology:
 pip install -r requirements.txt
 ```
 
-2. Install and start Ollama:
+2. Configure Cloud Ollama (Recommended - 3x faster):
 
-Download from https://ollama.ai
+Create `.env` file with:
+```
+OLLAMA_MODE=cloud
+OLLAMA_BASE_URL=https://ollama.com
+OLLAMA_KEY=<your-ollama-cloud-api-key>
+OLLAMA_MODEL=gpt-oss:120b
+OLLAMA_TIMEOUT=60
+```
 
-Run Ollama service:
+Get API key from: https://ollama.com/account
+
+3. (Optional) Local Ollama fallback:
+
+Install and start Ollama locally:
 ```bash
 ollama serve
 ```
 
-3. Pull a language model (in another terminal):
-
+Pull a model:
 ```bash
 ollama pull qwen2:7b
 ```
 
-Or use any compatible Ollama model (llama2, mistral, neural-chat, etc.)
-
-4. Verify Ollama is running:
-
+Verify:
 ```bash
 curl http://localhost:11434/api/tags
 ```
 
-Should return list of available models.
-
 ### Running the Server
 
-Use one of these methods:
+Start the server:
 
-Option 1: Using the startup script (recommended)
 ```bash
 python run_server.py
 ```
 
-Option 2: Using uvicorn directly
-```bash
-python -m uvicorn server.api:app --reload
-```
+Or directly with uvicorn:
 
-Option 3: Using uvicorn without reload (production)
 ```bash
 python -m uvicorn server.api:app --host 0.0.0.0 --port 8000
 ```
-
-Server starts on http://localhost:8000
 
 Test with:
 ```bash
@@ -103,44 +101,78 @@ Response:
 {"status": "healthy"}
 ```
 
+Cloud Ollama Mode (fast):
+- Automatically uses Cloud Ollama if .env has OLLAMA_MODE=cloud
+- Response time: 6-15 seconds per turn
+- Average: 11.8 seconds (3x faster than local)
+
+Local Ollama Mode (fallback):
+- Falls back automatically if Cloud Ollama unavailable
+- Response time: 24-44 seconds per turn
+- Suitable for testing/development
+
 ### Using the System
+
+Web UI (Recommended):
+
+Open in browser: http://localhost:8000/client/index.html
+
+Chat with the LLM-driven orchestrator:
+1. Enter: "I want to prepare for JEE Physics"
+2. System asks clarifying questions about topics and timeline
+3. Answer each question (conversational flow)
+4. When ready, system generates personalized study schedule
+5. Download generated DOCX document
+
+Via curl (Chat API):
+
+```bash
+# Start conversation
+curl -X POST http://localhost:8000/chat/start \
+  -H "Content-Type: application/json" \
+  -d '{"request": "I need a JEE study plan"}' | jq '.session_id'
+
+# Continue conversation (repeat with different answers)
+curl -X POST "http://localhost:8000/chat/answer?session_id=<ID>&question_key=user_input&answer=Physics+and+Maths" \
+  -X POST
+
+# Generate document when ready
+curl -X POST http://localhost:8000/chat/generate \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"<ID>","context":<context-from-chat>}'
+```
 
 Via Python client:
 
 ```python
-from lib.python_client import DocumentGenerationClient
-from server.models import StudentState
-from datetime import date, timedelta
+from server.chat_orchestrator import ChatOrchestrator
 
-client = DocumentGenerationClient("http://localhost:8000")
+chat = ChatOrchestrator()
 
-# Create student state (optional, for personalized prep)
-state = StudentState(
-    student_id="student_001",
-    created_date=date.today(),
-    exam_deadline=date.today() + timedelta(days=90),
-    available_hours_per_day=6.0
-)
+# Start conversation
+response = chat.start_conversation("I need JEE Physics preparation")
+print(response.message)  # LLM asks clarifying questions
 
-# Request preparation plan
-response = client.generate(
-    request="I completed Algebra and Trigonometry. JEE exam January 2026. What should I prepare today?",
-    student_state=state
-)
+# Answer questions
+context = response.context
+response = chat.add_answer(context, "user_input", "Kinematics and Mechanics")
 
-print(f"Document: {response['document_filename']}")
-print(f"Topics: {response['execution_plan']['outline']}")
+# When [READY] marker appears, generate document
+if response.is_ready_to_generate:
+    from server.orchestrator import Orchestrator
+    doc = Orchestrator()
+    prompt = chat.get_generation_prompt(response.context)
+    result = doc.generate_document(request=prompt)
+    print(f"Document: {result.document_filename}")
 ```
 
-Via curl:
+Legacy API (for backward compatibility):
 
 ```bash
 curl -X POST http://localhost:8000/agent \
   -H "Content-Type: application/json" \
   -d '{"request": "Create a JEE mathematics study plan for one week"}'
 ```
-
-Response includes document filename, execution plan, and metrics.
 
 ### Using LangGraph Orchestration (New)
 
@@ -515,42 +547,50 @@ All tests pass with both Ollama and mock LLM modes.
 
 ## Document Output
 
-Generated documents are saved in `output/` directory:
+Generated documents are real Microsoft Word 2007+ DOCX files saved in `output/` directory.
 
-Production API calls:
-- Filename format: `document_YYYYMMDD_HHMMSS.docx`
-- Location: `rag_app/output/document_20260708_142530.docx`
-- Files persist after generation (not deleted)
+Location and Naming:
+- Format: `document_YYYYMMDD_HHMMSS.docx`
+- Example: `document_20260709_093702.docx`
+- Files persist after generation
 
-Unit tests:
-- Tests use temporary directories (files deleted after test)
-- Test verification files saved to: `output/test_output_unit_test.docx`
-- Run: `python -m pytest tests/test_docx_generator.py::TestDOCXGenerator::test_save_to_output_folder -v`
+Document Content (Cloud Ollama Generated):
 
-Structure:
-- Title (Document Type)
-- Executive Summary (Assumptions)
-- Main Sections (from outline)
-  - Section heading
-  - Substantive content
-  - Consistent formatting
-- Page breaks between sections
+Example: 7-Day JEE Physics Kinematics Study Plan
 
-Example output for "JEE Mathematics 1-week prep":
+Title: 7-Day Kinematics Sprint - JEE Physics
 
-Title: JEE Mathematics 1-week Preparation Plan
-Assumptions: 
-  - Focus: Algebra, Trigonometry, Coordinate Geometry
-  - Duration: 7 days
-  - Study hours: 6 per day
+Content includes:
+- Goal statement
+- Structured tables with:
+  - Day breakdown
+  - Total hours per day
+  - Daily focus topics
+  - Detailed study plan with timing
+  - Practice problems and counts
+- Example row:
+  | Day | Hours | Focus | Plan | Practice |
+  | Mon | 5h | Motion 1D | 1. Skim NCERT (30min) 2. Derive equations (45min) ... | 12 questions |
 
-Sections:
-  1. Week Overview
-  2. Day 1: Algebra Fundamentals
-  3. Day 2: Advanced Algebra
-  4. ...and so on
+Word Document Features:
+- Professional formatting with bold/italic
+- Markdown support (tables, bullet points, numbered lists)
+- Headings at multiple levels
+- Color-coded text (blue headings, etc.)
+- Ready for printing or sharing
 
-Document is ready for printing or sharing with students.
+Real Content (Not Generic):
+- Specific daily breakdown with time allocations
+- Problem types and counts
+- Revision schedules
+- Self-test guidance
+- Links to resources (NCERT, YouTube channels, MCQ sources)
+
+Document is suitable for:
+- Student study guidance
+- Teacher distribution
+- Progress tracking
+- Printing or digital sharing
 
 ## Configuration
 
