@@ -642,7 +642,24 @@ Security:
 - Rate limit API endpoints
 - Use API keys for production (not shown here)
 
+## Prompts used:
+generate document for preparing jee given that i want to focus on physics and in thermodynamics lessen and i have not started that topic. give for 6 to 11pm time with breaks 
+
+Give me todo for today
+
 ## Troubleshooting
+
+Stopping ollama and python server:
+
+```
+echo "Stopping all processes..."
+pkill -f "ollama serve" 2>/dev/null && echo "Ollama stopped" || echo "○ Ollama not running"
+pkill -f "python.*server.api" 2>/dev/null && echo "Server stopped" || echo "○ Server not running"
+pkill -f "uvicorn" 2>/dev/null && echo " Uvicorn stopped" || echo "○ Uvicorn not running"
+sleep 2
+echo ""
+echo "All processes stopped."
+```
 
 Ollama Connection Error:
 ```
