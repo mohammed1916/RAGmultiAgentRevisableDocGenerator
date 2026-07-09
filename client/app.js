@@ -110,7 +110,9 @@ async function startChat(initialRequest) {
         currentChatContext = data.context;
         currentSessionId = data.session_id;  // Use session_id from server
 
-        updateProgress(data.context.confidence_level);
+        // Calculate progress based on conversation length
+        const progress = calculateProgress(data.context);
+        updateProgress(progress);
         progressSection.style.display = 'block';
 
         if (data.questions && data.questions.length > 0) {
@@ -150,9 +152,11 @@ async function answerQuestion(answer) {
         addChatMessage('assistant', data.message);
 
         currentChatContext = data.context;
-        updateProgress(data.context.confidence_level);
+        const progress = calculateProgress(data.context);
+        updateProgress(progress);
 
         if (data.is_ready_to_generate) {
+            updateProgress(1.0); // 100% when ready
             showGenerateButton();
         } else if (data.questions && data.questions.length > 0) {
             displayChatQuestions(data.questions);
@@ -294,6 +298,20 @@ function showTyping() {
 function removeTyping() {
     const typing = document.getElementById('typingIndicator');
     if (typing) typing.remove();
+}
+
+/**
+ * Calculate progress based on conversation length
+ */
+function calculateProgress(context) {
+    if (!context || !context.conversation) return 0;
+
+    // Progress based on number of exchanges
+    // Each user message = 20% up to 100%
+    const messageCount = context.conversation.filter(msg => msg.role === 'user').length;
+    const progress = Math.min(1.0, messageCount * 0.2);
+
+    return progress;
 }
 
 /**
