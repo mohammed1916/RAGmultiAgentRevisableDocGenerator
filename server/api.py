@@ -295,7 +295,10 @@ async def answer_question(
 
 @app.post("/chat/generate")
 async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
-    """Generate document from completed chat context.
+    """Generate document from completed chat context using multi-agent orchestration.
+
+    Uses LangChain/LangGraph agents (Planner, Writer, Reviewer) to create
+    a high-quality document from the chat conversation.
 
     Args:
         req: Request with session ID and context
@@ -304,15 +307,19 @@ async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
         Generated document response
     """
     logger.info(f"Generating document from chat: {req.session_id}")
+    logger.info(f"Context ready: {req.context.is_ready_to_generate}")
+    logger.info(f"Conversation messages: {len(req.context.conversation)}")
 
-    if not req.context.is_ready_to_generate:
+    # If context doesn't have is_ready_to_generate set, but has messages, generate anyway
+    if not req.context.is_ready_to_generate and len(req.context.conversation) == 0:
+        logger.warning(f"Chat context not ready: is_ready={req.context.is_ready_to_generate}, messages={len(req.context.conversation)}")
         raise HTTPException(
             status_code=400,
-            detail="Chat context not ready for generation. Answer all required questions first."
+            detail="Chat context not ready for generation. Have a conversation first."
         )
 
     try:
-        # Build comprehensive prompt
+        # Build comprehensive prompt from chat context
         prompt = chat_orchestrator.get_generation_prompt(req.context)
 
         # Create document request with context
@@ -320,19 +327,22 @@ async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
             request=prompt,
             metadata={
                 "session_id": req.session_id,
-                "audience": req.context.answers.get("audience"),
-                "scope": req.context.answers.get("scope"),
-                "tone": req.context.answers.get("tone"),
+                "chat_history": len(req.context.conversation),
+                "source": "chat_orchestrator",
             }
         )
 
-        # Generate document
+        logger.info(f"Calling multi-agent orchestrator for document generation...")
+
+        # Generate document using multi-agent pipeline (Planner -> Writer -> Reviewer)
         response = orchestrator.generate_document(doc_request)
-        logger.info(f"Document generated: {response.document_filename}")
+
+        logger.info(f"Document generated successfully: {response.document_filename}")
         return response
+
     except Exception as e:
         logger.error(f"Document generation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
 
 
 @app.get("/")
