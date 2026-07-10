@@ -11,10 +11,10 @@ from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.runnables import RunnableConfig
 
-from .orchestrator import Orchestrator
-from ..base.logger import setup_logger
-from ..base.models import DocumentRequest, ExecutionPlan, DocumentSection, ReviewFeedback
-from ..config import config
+from .base import Orchestrator
+from ...base.logger import setup_logger
+from ...base.models import DocumentRequest, ExecutionPlan, DocumentSection, ReviewFeedback
+from ...config import config
 
 logger = setup_logger(__name__)
 

@@ -10,9 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from ..base.models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest, DocumentStructure
-from ..core.orchestrator import Orchestrator
-from ..core.chat_orchestrator import ChatOrchestrator
-from ..core.langgraph_orchestrator import LangGraphOrchestrator
+from ..core import Orchestrator
+from ..core import ChatOrchestrator
+from ..core import LangGraphOrchestrator
 from ..agents.todo_generator import TodoGenerator
 from ..tools import DOCXGenerator
 from ..base.exceptions import DocumentGenerationException
