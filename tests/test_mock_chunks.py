@@ -1,7 +1,7 @@
 """Tests for mock RAG chunks to verify structure and readability."""
 
 import pytest
-from server.mock_data import MockData
+from server.base.mock_data import MockData
 
 
 class TestMockChunkStructure:

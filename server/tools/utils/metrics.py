@@ -3,7 +3,7 @@
 import time
 from typing import List, Optional
 
-from ...models import LLMMetrics, PipelineMetrics
+from ...base.models import LLMMetrics, PipelineMetrics
 
 
 class MetricsCollector:

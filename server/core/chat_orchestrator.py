@@ -7,15 +7,15 @@ No hardcoded logic - pure conversational flow.
 from typing import List, Optional, Dict
 from datetime import datetime
 
-from .models import (
+from ..base.models import (
     ChatMessage,
     ClarifyingQuestion,
     ChatContext,
     ChatResponse,
 )
-from .tools import MilvusRAG
-from .tools import OllamaClient
-from .logger import setup_logger
+from ..tools import MilvusRAG
+from ..tools import OllamaClient
+from ..base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

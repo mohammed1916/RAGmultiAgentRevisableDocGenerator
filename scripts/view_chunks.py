@@ -19,7 +19,7 @@ from tabulate import tabulate
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from server.tools import MilvusRAG
-from server.mock_data import MockData
+from server.base.mock_data import MockData
 
 
 def print_chunk(chunk: dict, verbose: bool = False):

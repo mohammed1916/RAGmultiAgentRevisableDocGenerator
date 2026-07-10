@@ -2,7 +2,7 @@
 
 import pytest
 from server.tools import MilvusRAG
-from server.mock_data import MockData
+from server.base.mock_data import MockData
 
 
 class TestMilvusChunkViewing:

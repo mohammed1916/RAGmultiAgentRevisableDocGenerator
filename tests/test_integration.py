@@ -6,7 +6,7 @@ import tempfile
 import os
 
 from server.orchestrator import Orchestrator
-from server.models import DocumentRequest
+from server.base.models import DocumentRequest
 from server.tools import DOCXGenerator
 
 

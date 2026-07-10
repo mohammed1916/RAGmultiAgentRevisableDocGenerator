@@ -5,9 +5,9 @@ from typing import Dict, List, Optional
 
 from ..tools import OllamaClient
 from ..tools import MilvusRAG
-from ..models import DocumentSection, ExecutionPlan
-from ..exceptions import WriterException
-from ..logger import setup_logger
+from ..base.models import DocumentSection, ExecutionPlan
+from ..base.exceptions import WriterException
+from ..base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

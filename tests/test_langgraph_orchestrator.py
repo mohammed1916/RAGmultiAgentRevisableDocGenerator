@@ -18,7 +18,7 @@ from server.langgraph_orchestrator import (
     generate_node,
     should_continue_review,
 )
-from server.models import ExecutionPlan, DocumentSection, ReviewFeedback
+from server.base.models import ExecutionPlan, DocumentSection, ReviewFeedback
 from server.config import config
 
 
@@ -285,7 +285,7 @@ class TestReviewNode:
     @pytest.mark.asyncio
     async def test_review_node_with_issues(self):
         """Test review node when issues found."""
-        from server.models import SectionFeedback
+        from server.base.models import SectionFeedback
 
         with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
             mock_reviewer = MagicMock()
@@ -344,7 +344,7 @@ class TestRefineNode:
     @pytest.mark.asyncio
     async def test_refine_node_success(self):
         """Test successful refine node execution."""
-        from server.models import SectionFeedback
+        from server.base.models import SectionFeedback
 
         with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
             mock_orchestrator = mock_orch.return_value

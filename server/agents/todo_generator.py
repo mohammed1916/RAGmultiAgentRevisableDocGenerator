@@ -4,8 +4,8 @@ import json
 from typing import List, Dict
 
 from ..tools import OllamaClient
-from ..models import DocumentSection
-from ..logger import setup_logger
+from ..base.models import DocumentSection
+from ..base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

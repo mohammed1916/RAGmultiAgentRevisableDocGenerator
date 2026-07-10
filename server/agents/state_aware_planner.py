@@ -6,9 +6,9 @@ from datetime import date, timedelta
 
 from ..tools import OllamaClient, ProgressExtractor, DateUtils, MilvusRAG
 from ..tools.utils.progress_extractor import ProgressValidator
-from ..models import ExecutionPlan, Task, StudentState, StudyPlan
-from ..exceptions import PlannerException
-from ..logger import setup_logger
+from ..base.models import ExecutionPlan, Task, StudentState, StudyPlan
+from ..base.exceptions import PlannerException
+from ..base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

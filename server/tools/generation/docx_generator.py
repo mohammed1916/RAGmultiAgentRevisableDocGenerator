@@ -7,9 +7,9 @@ from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt, RGBColor
 
-from ...exceptions import DOCXGenerationException
-from ...logger import setup_logger
-from ...models import DocumentSection, DocumentStructure
+from ...base.exceptions import DOCXGenerationException
+from ...base.logger import setup_logger
+from ...base.models import DocumentSection, DocumentStructure
 from .markdown_formatter import MarkdownFormatter
 
 logger = setup_logger(__name__)

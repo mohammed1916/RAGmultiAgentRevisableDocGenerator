@@ -3,8 +3,8 @@
 import re
 from datetime import datetime, date, timedelta
 from typing import List, Tuple, Optional
-from ...models import ProgressClaim, ProgressUpdate, StudentState, TopicProgress
-from ...logger import setup_logger
+from ...base.models import ProgressClaim, ProgressUpdate, StudentState, TopicProgress
+from ...base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

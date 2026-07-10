@@ -5,14 +5,14 @@ import os
 from datetime import datetime
 from typing import Tuple
 
-from .agents.planner import PlannerAgent
-from .agents.writer import WriterAgent
-from .agents.reviewer import ReviewerAgent
-from .tools import OllamaClient
-from .tools import MilvusRAG
-from .tools import DOCXGenerator
-from .tools import MetricsCollector
-from .models import (
+from ..agents.planner import PlannerAgent
+from ..agents.writer import WriterAgent
+from ..agents.reviewer import ReviewerAgent
+from ..tools import OllamaClient
+from ..tools import MilvusRAG
+from ..tools import DOCXGenerator
+from ..tools import MetricsCollector
+from ..base.models import (
     DocumentRequest,
     DocumentResponse,
     ExecutionPlan,
@@ -20,9 +20,9 @@ from .models import (
     DocumentSection,
     ReviewFeedback,
 )
-from .exceptions import DocumentGenerationException
-from .logger import setup_logger
-from .config import config
+from ..base.exceptions import DocumentGenerationException
+from ..base.logger import setup_logger
+from ..config import config
 
 logger = setup_logger(__name__)
 

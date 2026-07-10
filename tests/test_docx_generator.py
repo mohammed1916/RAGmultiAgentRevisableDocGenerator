@@ -6,8 +6,8 @@ import pytest
 from pathlib import Path
 
 from server.tools import DOCXGenerator
-from server.models import DocumentSection, DocumentStructure
-from server.exceptions import DOCXGenerationException
+from server.base.models import DocumentSection, DocumentStructure
+from server.base.exceptions import DOCXGenerationException
 
 
 class TestDOCXGenerator:

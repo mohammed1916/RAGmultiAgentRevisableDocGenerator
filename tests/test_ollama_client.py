@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from server.tools import OllamaClient
-from server.exceptions import OllamaException, OllamaConnectionException
+from server.base.exceptions import OllamaException, OllamaConnectionException
 
 
 class TestOllamaClient:

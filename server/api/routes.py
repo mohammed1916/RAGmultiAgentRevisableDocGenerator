@@ -9,14 +9,14 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest, DocumentStructure
-from .orchestrator import Orchestrator
-from .chat_orchestrator import ChatOrchestrator
-from .langgraph_orchestrator import LangGraphOrchestrator
-from .agents.todo_generator import TodoGenerator
-from .tools import DOCXGenerator
-from .exceptions import DocumentGenerationException
-from .logger import setup_logger
+from ..base.models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest, DocumentStructure
+from ..core.orchestrator import Orchestrator
+from ..core.chat_orchestrator import ChatOrchestrator
+from ..core.langgraph_orchestrator import LangGraphOrchestrator
+from ..agents.todo_generator import TodoGenerator
+from ..tools import DOCXGenerator
+from ..base.exceptions import DocumentGenerationException
+from ..base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

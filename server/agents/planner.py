@@ -5,9 +5,9 @@ import time
 from typing import Dict, List
 
 from ..tools import OllamaClient
-from ..models import ExecutionPlan, Task
-from ..exceptions import PlannerException
-from ..logger import setup_logger
+from ..base.models import ExecutionPlan, Task
+from ..base.exceptions import PlannerException
+from ..base.logger import setup_logger
 
 logger = setup_logger(__name__)
 
