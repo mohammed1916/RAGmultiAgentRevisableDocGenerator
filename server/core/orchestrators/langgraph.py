@@ -257,10 +257,20 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
         for section in state["sections"]:
             if isinstance(section, dict):
                 generator.add_heading(section.get("title", ""), level=section.get("heading_level", 1))
-                generator.add_paragraph(section.get("content", ""))
+                content = section.get("content", "")
+                # Use markdown rendering for markdown content (tables, lists, etc)
+                if "|" in content or "*" in content or "-" in content:
+                    generator.add_markdown_section(content)
+                else:
+                    generator.add_paragraph(content)
             else:
                 generator.add_heading(section.title, level=section.heading_level)
-                generator.add_paragraph(section.content)
+                content = section.content
+                # Use markdown rendering for markdown content (tables, lists, etc)
+                if "|" in content or "*" in content or "-" in content:
+                    generator.add_markdown_section(content)
+                else:
+                    generator.add_paragraph(content)
 
         # Save document
         os.makedirs("output", exist_ok=True)
