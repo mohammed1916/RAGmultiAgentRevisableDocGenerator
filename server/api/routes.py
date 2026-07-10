@@ -47,10 +47,13 @@ chat_sessions = {}
 # Mount static files (client UI)
 try:
     from pathlib import Path
-    client_path = Path(__file__).parent.parent / "client"
+    # Client is at project root: client/ (not in server/)
+    client_path = Path(__file__).parent.parent.parent / "client"
     if client_path.exists():
         app.mount("/client", StaticFiles(directory=str(client_path)), name="static")
         logger.info(f"Mounted static files from {client_path}")
+    else:
+        logger.warning(f"Client directory not found at {client_path}")
 except Exception as e:
     logger.warning(f"Could not mount static files: {str(e)}")
 

@@ -65,32 +65,13 @@ class MilvusRAG:
         if self.client.has_collection(self.collection_name):
             self.client.drop_collection(self.collection_name)
 
-        # Create collection with schema
+        # Create collection with MilvusClient 3.0+ API (simplified)
+        # Using auto_id=True for ID generation, simple schema
         self.client.create_collection(
             collection_name=self.collection_name,
             dimension=384,
             metric_type="L2",
-            schema={
-                "fields": [
-                    {"name": "id", "dtype": "VARCHAR", "params": {"max_length": 100}},
-                    {"name": "embedding", "dtype": "FLOAT_VECTOR", "params": {"dim": 384}},
-                    {"name": "content", "dtype": "VARCHAR", "params": {"max_length": 10000}},
-                    {"name": "document_type", "dtype": "VARCHAR", "params": {"max_length": 100}},
-                    {"name": "metadata", "dtype": "VARCHAR", "params": {"max_length": 5000}},
-                ],
-                "primary_field": "id",
-                "metric_type": "L2",
-            }
-        )
-
-        # Create index
-        self.client.create_index(
-            collection_name=self.collection_name,
-            field_name="embedding",
-            index_type="IVF_FLAT",
-            index_name="embedding_index",
-            metric_type="L2",
-            params={"nlist": 128},
+            auto_id=True,
         )
 
     def _generate_mock_embedding(self, text: str) -> List[float]:
