@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from langchain_core.messages import HumanMessage, AIMessage
 
-from server.langgraph_orchestrator import (
+from server.core.orchestrators.langgraph import (
     DocumentGenerationState,
     LangGraphOrchestrator,
     plan_node,
