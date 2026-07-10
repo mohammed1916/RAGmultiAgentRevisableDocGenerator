@@ -11,8 +11,14 @@ Usage:
 
 import argparse
 import json
+import sys
+from pathlib import Path
 from tabulate import tabulate
-from server.tools.milvus_rag import MilvusRAG
+
+# Add parent directory to path so we can import server modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from server.tools import MilvusRAG
 from server.mock_data import MockData
 
 

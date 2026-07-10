@@ -7,7 +7,7 @@ import json
 import re
 from typing import List, Dict, Any
 from pathlib import Path
-from server.logger import setup_logger
+from ...logger import setup_logger
 
 logger = setup_logger(__name__)
 

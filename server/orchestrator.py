@@ -8,10 +8,10 @@ from typing import Tuple
 from .agents.planner import PlannerAgent
 from .agents.writer import WriterAgent
 from .agents.reviewer import ReviewerAgent
-from .tools.ollama_client import OllamaClient
-from .tools.milvus_rag import MilvusRAG
-from .tools.docx_generator import DOCXGenerator
-from .tools.metrics import MetricsCollector
+from .tools import OllamaClient
+from .tools import MilvusRAG
+from .tools import DOCXGenerator
+from .tools import MetricsCollector
 from .models import (
     DocumentRequest,
     DocumentResponse,

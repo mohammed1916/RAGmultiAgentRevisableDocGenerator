@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from collections import Counter
 import math
 
-from ..logger import setup_logger
+from ...logger import setup_logger
 
 logger = setup_logger(__name__)
 

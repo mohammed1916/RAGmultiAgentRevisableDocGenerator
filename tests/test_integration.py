@@ -7,7 +7,7 @@ import os
 
 from server.orchestrator import Orchestrator
 from server.models import DocumentRequest
-from server.tools.docx_generator import DOCXGenerator
+from server.tools import DOCXGenerator
 
 
 class TestEndToEndDocumentGeneration:

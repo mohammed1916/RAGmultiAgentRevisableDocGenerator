@@ -3,7 +3,7 @@
 import json
 from typing import List, Dict
 
-from ..tools.ollama_client import OllamaClient
+from ..tools import OllamaClient
 from ..models import DocumentSection
 from ..logger import setup_logger
 

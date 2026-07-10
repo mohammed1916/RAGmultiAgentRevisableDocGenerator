@@ -1,7 +1,7 @@
 """Tests for viewing and listing chunks from Milvus RAG."""
 
 import pytest
-from server.tools.milvus_rag import MilvusRAG
+from server.tools import MilvusRAG
 from server.mock_data import MockData
 
 

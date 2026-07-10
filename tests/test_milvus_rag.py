@@ -1,7 +1,7 @@
 """Tests for Milvus-based RAG system."""
 
 import pytest
-from server.tools.milvus_rag import MilvusRAG
+from server.tools import MilvusRAG
 
 
 class TestMilvusRAG:

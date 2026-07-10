@@ -14,7 +14,7 @@ from .orchestrator import Orchestrator
 from .chat_orchestrator import ChatOrchestrator
 from .langgraph_orchestrator import LangGraphOrchestrator
 from .agents.todo_generator import TodoGenerator
-from .tools.docx_generator import DOCXGenerator
+from .tools import DOCXGenerator
 from .exceptions import DocumentGenerationException
 from .logger import setup_logger
 

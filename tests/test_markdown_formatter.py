@@ -3,8 +3,8 @@
 import pytest
 from pathlib import Path
 
-from server.tools.markdown_formatter import MarkdownFormatter
-from server.tools.docx_generator import DOCXGenerator
+from server.tools import MarkdownFormatter
+from server.tools import DOCXGenerator
 
 
 class TestMarkdownFormatter:

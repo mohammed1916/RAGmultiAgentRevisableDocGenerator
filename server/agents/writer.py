@@ -3,8 +3,8 @@
 import json
 from typing import Dict, List, Optional
 
-from ..tools.ollama_client import OllamaClient
-from ..tools.milvus_rag import MilvusRAG
+from ..tools import OllamaClient
+from ..tools import MilvusRAG
 from ..models import DocumentSection, ExecutionPlan
 from ..exceptions import WriterException
 from ..logger import setup_logger

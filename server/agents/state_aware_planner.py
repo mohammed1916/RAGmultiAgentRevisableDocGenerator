@@ -4,10 +4,8 @@ import json
 from typing import Optional
 from datetime import date, timedelta
 
-from ..tools.ollama_client import OllamaClient
-from ..tools.progress_extractor import ProgressExtractor, ProgressValidator
-from ..tools.date_utils import DateUtils
-from ..tools.milvus_rag import MilvusRAG
+from ..tools import OllamaClient, ProgressExtractor, DateUtils, MilvusRAG
+from ..tools.utils.progress_extractor import ProgressValidator
 from ..models import ExecutionPlan, Task, StudentState, StudyPlan
 from ..exceptions import PlannerException
 from ..logger import setup_logger

@@ -4,7 +4,7 @@ import json
 from unittest.mock import Mock, patch
 import pytest
 
-from server.tools.ollama_client import OllamaClient
+from server.tools import OllamaClient
 from server.exceptions import OllamaException, OllamaConnectionException
 
 

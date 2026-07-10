@@ -3,7 +3,7 @@
 import json
 from typing import List
 
-from ..tools.ollama_client import OllamaClient
+from ..tools import OllamaClient
 from ..models import DocumentSection, ReviewFeedback, QualityScore, SectionFeedback
 from ..exceptions import ReviewerException
 from ..logger import setup_logger

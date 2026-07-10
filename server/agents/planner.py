@@ -4,7 +4,7 @@ import json
 import time
 from typing import Dict, List
 
-from ..tools.ollama_client import OllamaClient
+from ..tools import OllamaClient
 from ..models import ExecutionPlan, Task
 from ..exceptions import PlannerException
 from ..logger import setup_logger

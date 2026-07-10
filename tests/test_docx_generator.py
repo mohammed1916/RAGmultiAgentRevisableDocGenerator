@@ -5,7 +5,7 @@ import tempfile
 import pytest
 from pathlib import Path
 
-from server.tools.docx_generator import DOCXGenerator
+from server.tools import DOCXGenerator
 from server.models import DocumentSection, DocumentStructure
 from server.exceptions import DOCXGenerationException
 

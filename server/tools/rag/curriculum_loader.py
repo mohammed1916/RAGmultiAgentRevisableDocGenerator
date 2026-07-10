@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 from .milvus_rag import MilvusRAG
-from ..logger import setup_logger
+from ...logger import setup_logger
 
 logger = setup_logger(__name__)
 

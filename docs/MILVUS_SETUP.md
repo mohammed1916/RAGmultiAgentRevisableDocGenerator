@@ -47,7 +47,7 @@ Milvus mode stores embeddings in a persistent vector database.
 If the server starts with the following message:
 
 ```text
-python .\run_server.py
+python run_server.py
 
 Milvus connection failed: Cannot reach Milvus at localhost:19530. Using mock mode.
 ```
@@ -73,19 +73,19 @@ python .\run_server.py
 Load sample data:
 
 ```bash
-python view_chunks.py --load-mock
+python scripts/view_chunks.py --load-mock
 ```
 
 View all chunks:
 
 ```bash
-python view_chunks.py
+python scripts/view_chunks.py
 ```
 
 Search chunks:
 
 ```bash
-python view_chunks.py --search "Functions"
+python scripts/view_chunks.py --search "Functions"
 ```
 
 This mode is recommended for development and testing.
@@ -106,22 +106,22 @@ This mode is recommended for development and testing.
 Automatic setup:
 
 ```powershell
-python setup_milvus.py --docker --load
+python scripts/setup_milvus.py --docker --load
 ```
 
 Manual setup:
 
 ```powershell
 docker-compose up -d
-python view_chunks.py --stats
-python setup_milvus.py --load
+python scripts/view_chunks.py --stats
+python scripts/setup_milvus.py --load
 ```
 
 ### Linux/macOS
 
 ```bash
 docker-compose up -d
-python setup_milvus.py --load
+python scripts/setup_milvus.py --load
 ```
 
 ---
@@ -129,7 +129,7 @@ python setup_milvus.py --load
 ## Verify the Installation
 
 ```bash
-python view_chunks.py --stats
+python scripts/view_chunks.py --stats
 ```
 
 Expected output:
@@ -145,7 +145,7 @@ Indexed: Yes
 ## Load Documents
 
 ```bash
-python setup_milvus.py --load
+python scripts/setup_milvus.py --load
 ```
 
 Alternatively, documents can be inserted programmatically through the RAG API.
@@ -172,37 +172,37 @@ Alternatively, documents can be inserted programmatically through the RAG API.
 View all chunks:
 
 ```bash
-python view_chunks.py
+python scripts/view_chunks.py
 ```
 
 View by document type:
 
 ```bash
-python view_chunks.py --type jee_math_curriculum
+python scripts/view_chunks.py --type jee_math_curriculum
 ```
 
 View a specific chunk:
 
 ```bash
-python view_chunks.py --id jee_001
+python scripts/view_chunks.py --id jee_001
 ```
 
 Search:
 
 ```bash
-python view_chunks.py --search "Functions"
+python scripts/view_chunks.py --search "Functions"
 ```
 
 Display complete information:
 
 ```bash
-python view_chunks.py --all -v
+python scripts/view_chunks.py --all -v
 ```
 
 View statistics:
 
 ```bash
-python view_chunks.py --stats
+python scripts/view_chunks.py --stats
 ```
 
 ---
@@ -291,7 +291,7 @@ Milvus may still be initializing.
 Verify the connection:
 
 ```bash
-python view_chunks.py --stats
+python scripts/view_chunks.py --stats
 ```
 
 ---
@@ -310,7 +310,7 @@ Switch to Milvus mode:
 
 ```bash
 docker-compose up -d
-python view_chunks.py --stats
+python scripts/view_chunks.py --stats
 ```
 
 ---
@@ -369,7 +369,7 @@ Retrieved Chunks
 
 ```bash
 python .\run_server.py
-python view_chunks.py --load-mock
+python scripts/view_chunks.py --load-mock
 ```
 
 ---
@@ -377,8 +377,8 @@ python view_chunks.py --load-mock
 ## Production
 
 ```bash
-python setup_milvus.py --docker --load
-python view_chunks.py --stats
+python scripts/setup_milvus.py --docker --load
+python scripts/view_chunks.py --stats
 ```
 
 ---

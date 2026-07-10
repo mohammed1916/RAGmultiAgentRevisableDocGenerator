@@ -15,7 +15,11 @@ import subprocess
 import sys
 import argparse
 from pathlib import Path
-from server.tools.milvus_rag import MilvusRAG
+
+# Add parent directory to path so we can import server modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from server.tools import MilvusRAG
 from server.logger import setup_logger
 
 logger = setup_logger(__name__)

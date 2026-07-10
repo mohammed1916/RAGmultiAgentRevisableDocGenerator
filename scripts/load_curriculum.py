@@ -8,8 +8,11 @@ import json
 import sys
 from pathlib import Path
 from typing import List, Dict, Any
-from server.tools.document_chunker import DocumentChunker
-from server.tools.milvus_rag import MilvusRAG
+
+# Add parent directory to path so we can import server modules
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from server.tools import DocumentChunker, MilvusRAG
 from server.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -117,9 +120,7 @@ def load_curriculum_data(json_file: str = "server/data/curriculum_data.json"):
 
         # Flush to persist data
         if not rag.mock_mode:
-            from pymilvus import Collection
-            collection = Collection(rag.collection_name, using="default")
-            collection.flush()
+            rag.client.flush(rag.collection_name)
             print(f"\n✓ Flushing data to disk...")
 
         print(f"\n✅ Successfully loaded all {len(all_chunks)} chunks!")

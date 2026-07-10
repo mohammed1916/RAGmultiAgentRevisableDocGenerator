@@ -4,7 +4,7 @@ import pytest
 import os
 from unittest.mock import patch, MagicMock
 
-from server.tools.ollama_client import OllamaClient
+from server.tools import OllamaClient
 
 
 class TestOllamaCloudConfiguration:

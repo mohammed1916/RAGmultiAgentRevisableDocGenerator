@@ -13,8 +13,8 @@ from .models import (
     ChatContext,
     ChatResponse,
 )
-from .tools.milvus_rag import MilvusRAG
-from .tools.ollama_client import OllamaClient
+from .tools import MilvusRAG
+from .tools import OllamaClient
 from .logger import setup_logger
 
 logger = setup_logger(__name__)
