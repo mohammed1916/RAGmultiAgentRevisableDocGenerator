@@ -104,9 +104,9 @@ class DocumentResponse(BaseModel):
 
     success: bool
     document_filename: str
-    execution_plan: ExecutionPlan
-    assumptions: Dict[str, str]
-    metrics: PipelineMetrics
+    execution_plan: Optional[ExecutionPlan] = None
+    assumptions: Optional[Dict[str, str]] = None
+    metrics: Optional[PipelineMetrics] = None
     quality_scores: Optional[QualityScore] = None
     message: str = ""
 

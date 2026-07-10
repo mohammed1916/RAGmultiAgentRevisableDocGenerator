@@ -13,7 +13,7 @@ from typing import List, Dict, Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from server.tools import DocumentChunker, MilvusRAG
-from server.logger import setup_logger
+from server.base.logger import setup_logger
 
 logger = setup_logger(__name__)
 

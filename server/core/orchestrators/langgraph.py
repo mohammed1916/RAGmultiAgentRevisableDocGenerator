@@ -238,26 +238,35 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
     logger.info("📄 GENERATE NODE: Generating output document")
 
     try:
-        orchestrator = Orchestrator()
+        import os
+        from datetime import datetime
+        from ...tools import DOCXGenerator
 
         if not state.get("sections"):
             return {"error_message": "No sections to generate document from"}
 
-        sections = [
-            DocumentSection(
-                title=s["title"],
-                content=s["content"],
-                heading_level=s.get("heading_level", 1),
-            )
-            for s in state["sections"]
-        ]
+        # Create document
+        generator = DOCXGenerator()
+        title = "Generated Study Plan"
+        if state.get("execution_plan"):
+            title = state["execution_plan"].document_type
 
-        filename = orchestrator.docx_generator.generate_document(
-            state["execution_plan"].outline if state.get("execution_plan") else [],
-            sections,
-            state.get("metadata", {})
-        )
+        generator.create_document(title=title)
 
+        # Add sections
+        for section in state["sections"]:
+            if isinstance(section, dict):
+                generator.add_heading(section.get("title", ""), level=section.get("heading_level", 1))
+                generator.add_paragraph(section.get("content", ""))
+            else:
+                generator.add_heading(section.title, level=section.heading_level)
+                generator.add_paragraph(section.content)
+
+        # Save document
+        os.makedirs("output", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filepath = os.path.join("output", f"document_{timestamp}.docx")
+        filename = generator.save(filepath)
         logger.info(f"✓ Document generated: {filename}")
 
         return {

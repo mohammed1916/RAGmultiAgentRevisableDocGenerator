@@ -126,7 +126,7 @@ class TestPlanNode:
     @pytest.mark.asyncio
     async def test_plan_node_success(self):
         """Test successful plan node execution."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_planner = MagicMock()
             mock_orch.return_value.planner = mock_planner
 
@@ -154,7 +154,7 @@ class TestPlanNode:
     @pytest.mark.asyncio
     async def test_plan_node_error_handling(self):
         """Test plan node error handling."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_orch.return_value.planner.plan.side_effect = Exception("Planning failed")
 
             state: DocumentGenerationState = {
@@ -176,7 +176,7 @@ class TestWriteNode:
     @pytest.mark.asyncio
     async def test_write_node_success(self):
         """Test successful write node execution."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_writer = MagicMock()
             mock_orch.return_value.writer = mock_writer
 
@@ -222,7 +222,7 @@ class TestWriteNode:
     @pytest.mark.asyncio
     async def test_write_node_error_handling(self):
         """Test write node error handling."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_orch.return_value.writer.write_all_sections.side_effect = Exception("Write failed")
 
             plan = ExecutionPlan(
@@ -250,7 +250,7 @@ class TestReviewNode:
     @pytest.mark.asyncio
     async def test_review_node_no_issues(self):
         """Test review node when no issues found."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_reviewer = MagicMock()
             mock_orch.return_value.reviewer = mock_reviewer
 
@@ -287,7 +287,7 @@ class TestReviewNode:
         """Test review node when issues found."""
         from server.base.models import SectionFeedback
 
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_reviewer = MagicMock()
             mock_orch.return_value.reviewer = mock_reviewer
 
@@ -346,7 +346,7 @@ class TestRefineNode:
         """Test successful refine node execution."""
         from server.base.models import SectionFeedback
 
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_orchestrator = mock_orch.return_value
             mock_orchestrator._refine_sections = MagicMock()
 
@@ -383,7 +383,7 @@ class TestRefineNode:
     @pytest.mark.asyncio
     async def test_refine_node_error_handling(self):
         """Test refine node error handling."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_orch.return_value._refine_sections.side_effect = Exception("Refine failed")
 
             plan = ExecutionPlan(
@@ -414,7 +414,7 @@ class TestGenerateNode:
     @pytest.mark.asyncio
     async def test_generate_node_success(self):
         """Test successful document generation."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_generator = MagicMock()
             mock_orch.return_value.docx_generator = mock_generator
             mock_generator.generate_document.return_value = "document_123.docx"
@@ -459,7 +459,7 @@ class TestGenerateNode:
     @pytest.mark.asyncio
     async def test_generate_node_error_handling(self):
         """Test generate node error handling."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_orch.return_value.docx_generator.generate_document.side_effect = Exception(
                 "Generation failed"
             )
@@ -498,7 +498,7 @@ class TestLangGraphOrchestrator:
     @pytest.mark.asyncio
     async def test_generate_document_success(self):
         """Test generate_document method success flow."""
-        with patch("server.langgraph_orchestrator.Orchestrator") as mock_orch:
+        with patch("server.core.orchestrators.base.Orchestrator") as mock_orch:
             mock_planner = MagicMock()
             mock_writer = MagicMock()
             mock_reviewer = MagicMock()
@@ -564,7 +564,7 @@ class TestLangGraphOrchestrator:
     @pytest.mark.asyncio
     async def test_generate_document_default_metadata(self):
         """Test generate_document with no metadata."""
-        with patch("server.langgraph_orchestrator.Orchestrator"):
+        with patch("server.core.orchestrators.base.Orchestrator"):
             orchestrator = LangGraphOrchestrator()
 
             # Mock the graph

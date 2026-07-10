@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directory to path so we can import server modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from server.langgraph_orchestrator import LangGraphOrchestrator
+from server.core import LangGraphOrchestrator
 from server.tools import MilvusRAG
 from server.logger import setup_logger
 

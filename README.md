@@ -217,7 +217,7 @@ Response:
 
 ```python
 import asyncio
-from server.langgraph_orchestrator import LangGraphOrchestrator
+from server.core import LangGraphOrchestrator
 
 async def main():
     orchestrator = LangGraphOrchestrator()
@@ -251,7 +251,7 @@ asyncio.run(main())
 ```
 Request
   ↓
-LangGraphOrchestrator (server/langgraph_orchestrator.py)
+LangGraphOrchestrator (server/core/orchestrators/langgraph.py)
   ├─ Plan Node (LangChain Agent with tools)
   │  ├─ Tool: @plan_document_tool (autonomous)
   │  └─ Output: ExecutionPlan (outline, tasks)
@@ -696,52 +696,71 @@ Try: "I completed Algebra" or "I mastered Algebra"
 ## Project Structure
 
 rag_app/
-├── server/
-│   ├── api.py (FastAPI server with LangGraph endpoint)
-│   ├── orchestrator.py (Custom pipeline - still supported)
-│   ├── langgraph_orchestrator.py (NEW: LangGraph state machine)
-│   ├── langchain_agents.py (NEW: LangChain tool definitions)
-│   ├── chat_orchestrator.py (Chat flow with clarifying questions)
-│   ├── models.py (Pydantic models)
-│   ├── config.py (Settings)
-│   ├── logger.py (Logging setup)
-│   ├── exceptions.py (Custom exceptions)
-│   ├── agents/
-│   │   ├── planner.py (Planning agent - wrapped by LangChain)
-│   │   ├── writer.py (Writing agent with RAG - wrapped by LangChain)
-│   │   ├── reviewer.py (Review agent - wrapped by LangChain)
-│   │   └── state_aware_planner.py (Progress-aware planning)
-│   ├── tools/
-│   │   ├── ollama_client.py (LLM interface)
-│   │   ├── milvus_rag.py (Vector database)
-│   │   ├── docx_generator.py (Word document creation)
-│   │   ├── progress_extractor.py (NLP for progress)
-│   │   ├── date_utils.py (Date parsing and scheduling)
-│   │   ├── metrics.py (Metrics collection)
-│   │   └── evaluation_metrics.py (ROUGE, BLEU, etc.)
+├── scripts/                           (Utility scripts)
+│   ├── setup_milvus.py               (Milvus Docker management)
+│   ├── load_curriculum.py            (Load data into Milvus)
+│   ├── view_chunks.py                (Inspect chunks)
+│   └── show_metrics.py               (Display metrics)
+│
+├── server/                            (Application core)
+│   ├── api/
+│   │   └── routes.py                 (FastAPI endpoints)
+│   ├── core/
+│   │   └── orchestrators/            (3 orchestrator implementations)
+│   │       ├── base.py               (Traditional multi-agent)
+│   │       ├── langgraph.py          (LangGraph StateGraph)
+│   │       └── chat.py               (LLM-driven conversational)
+│   ├── config/
+│   │   └── settings.py               (Configuration)
+│   ├── base/
+│   │   ├── exceptions.py             (Custom exceptions)
+│   │   ├── models.py                 (Pydantic models)
+│   │   ├── logger.py                 (Logging setup)
+│   │   └── mock_data.py              (Mock data for testing)
+│   ├── agents/                       (LangGraph agents)
+│   │   ├── planner.py
+│   │   ├── writer.py
+│   │   ├── reviewer.py
+│   │   ├── todo_generator.py
+│   │   └── state_aware_planner.py
+│   ├── tools/                        (Organized by functionality)
+│   │   ├── rag/
+│   │   │   └── milvus_rag.py         (Vector database)
+│   │   ├── generation/
+│   │   │   ├── docx_generator.py     (Word document creation)
+│   │   │   ├── markdown_formatter.py (Markdown formatting)
+│   │   │   └── document_chunker.py   (Document chunking)
+│   │   ├── llm/
+│   │   │   └── ollama_client.py      (LLM interface)
+│   │   └── utils/
+│   │       ├── metrics.py
+│   │       ├── evaluation_metrics.py (ROUGE, BLEU, etc.)
+│   │       ├── date_utils.py         (Date parsing)
+│   │       └── progress_extractor.py (NLP for progress)
+│   ├── main.py                       (Server entry point)
 │   └── data/
-│       └── curriculum_data.json (11 complete subject syllabuses)
-├── tests/
-│   ├── test_langgraph_orchestrator.py (NEW: State machine tests)
-│   ├── test_langchain_agents.py (NEW: Tool/agent tests)
-│   ├── test_chat_orchestrator.py (Chat tests)
-│   ├── test_agents.py (Agent unit tests)
-│   ├── test_student_state.py (Progress tracking tests)
-│   ├── test_rag_document_generation.py (RAG tests)
-│   ├── test_milvus_rag.py (Vector DB tests)
-│   ├── test_evaluation_metrics.py (Metrics tests)
-│   └── test_end_to_end_jee_todo.py (Integration tests)
-├── client/
-│   ├── index.html (Main UI with chatbot)
-│   ├── app.js (Frontend logic with LangGraph endpoint support)
-│   ├── styles.css (Styling)
-│   └── api.js (API client)
-├── lib/
-│   └── python_client.py (Python client library)
-├── output/ (Generated DOCX files)
-├── requirements.txt (Dependencies + LangChain/LangGraph)
-├── run_server.py (Server startup script)
-└── README.md (this file)
+│       └── curriculum_data.json      (11 complete subject syllabuses)
+│
+├── tests/                            (Organized test suite)
+│   ├── unit/                         (Fast unit tests - 5 files)
+│   ├── e2e/                          (End-to-end tests - 1 file)
+│   ├── smoke/                        (API smoke tests - 1 file)
+│   ├── conftest.py                   (Shared fixtures)
+│   └── TESTING.md                    (Testing guide)
+│
+├── docs/                             (Documentation)
+│   ├── EXECUTION_FLOW.md             (Pipeline documentation)
+│   ├── MILVUS_SETUP.md               (Vector DB setup)
+│   ├── curriculum_data.json
+│   ├── schema.json
+│   └── jee_mathematics.json
+│
+├── output/                           (Generated DOCX files)
+├── run_server.py                     (Server startup)
+├── docker-compose.yml                (Milvus Docker setup)
+├── pytest.ini                        (Test configuration)
+├── requirements.txt                  (Dependencies)
+└── README.md                         (this file)
 
 ## Requirements
 

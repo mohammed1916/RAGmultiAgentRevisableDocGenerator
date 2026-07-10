@@ -238,8 +238,8 @@ docker-compose down -v
 ## Programmatically Load Documents
 
 ```python
-from server.tools.milvus_rag import MilvusRAG
-from server.mock_data import MockData
+from server.tools import MilvusRAG
+from server.base import MockData
 
 rag = MilvusRAG()
 
@@ -404,7 +404,9 @@ python -m pytest tests/
 
 # Additional Resources
 
-* `setup_milvus.py` — Automated Milvus installation and initialization
-* `view_chunks.py` — Command-line utility for inspecting stored chunks
-* `server/tools/milvus_rag.py` — Milvus-backed RAG implementation
-* Milvus documentation: https://milvus.io/
+* `scripts/setup_milvus.py` — Automated Milvus installation and initialization
+* `scripts/view_chunks.py` — Command-line utility for inspecting stored chunks
+* `server/tools/rag/milvus_rag.py` — Milvus-backed RAG implementation
+* [Milvus documentation](https://milvus.io/)
+* [RAG System Guide](docs/README.md)
+* [Testing Guide](tests/TESTING.md)
