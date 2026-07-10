@@ -1,29 +1,26 @@
 """Milvus-based RAG system for curriculum-aware document retrieval.
 
-Replaces document_fetcher and document_indexer with Milvus vector DB.
+Uses modern MilvusClient API (PyMilvus 3.0+), replacing deprecated ORM-style API.
 """
 
 import json
 import socket
 from typing import List, Dict, Any, Optional
-from pathlib import Path
 import hashlib
-import threading
 
 try:
-    from pymilvus import Collection, connections, utility, FieldSchema, CollectionSchema, DataType
+    from pymilvus import MilvusClient
 except ImportError:
-    print("WARNING: pymilvus not installed. Install with: pip install pymilvus")
+    print("WARNING: pymilvus not installed. Install with: pip install pymilvus>=3.0")
 
 
 class MilvusRAG:
-    """Milvus-based RAG for semantic search on curriculum data."""
+    """Milvus-based RAG for semantic search on curriculum data using modern MilvusClient API."""
 
     def __init__(
         self,
         host: str = "localhost",
         port: int = 19530,
-        db_name: str = "curriculum_db",
         collection_name: str = "documents",
     ):
         """Initialize Milvus RAG system.
@@ -31,13 +28,12 @@ class MilvusRAG:
         Args:
             host: Milvus server host
             port: Milvus server port
-            db_name: Database name
             collection_name: Collection name for documents
         """
         self.host = host
         self.port = port
-        self.db_name = db_name
         self.collection_name = collection_name
+        self.client = None
         self.mock_mode = False
         self.mock_documents = {}
 
@@ -60,53 +56,42 @@ class MilvusRAG:
         finally:
             sock.close()
 
-        # Connect with pymilvus
-        connections.connect(
-            alias="default",
-            host=self.host,
-            port=self.port,
-        )
+        # Initialize MilvusClient (modern API)
+        self.client = MilvusClient(f"http://{self.host}:{self.port}")
 
     def _create_collection(self):
         """Create collection schema if it doesn't exist."""
-        if utility.has_collection(self.collection_name, using="default"):
-            utility.drop_collection(self.collection_name, using="default")
+        # Drop if exists
+        if self.client.has_collection(self.collection_name):
+            self.client.drop_collection(self.collection_name)
 
-        # Define schema
-        fields = [
-            FieldSchema(
-                name="id",
-                dtype=DataType.VARCHAR,
-                is_primary=True,
-                auto_id=False,
-                max_length=100,
-            ),
-            FieldSchema(
-                name="embedding",
-                dtype=DataType.FLOAT_VECTOR,
-                dim=384,  # Embedding dimension
-            ),
-            FieldSchema(name="content", dtype=DataType.VARCHAR, max_length=10000),
-            FieldSchema(name="document_type", dtype=DataType.VARCHAR, max_length=100),
-            FieldSchema(name="metadata", dtype=DataType.VARCHAR, max_length=5000),
-        ]
-
-        schema = CollectionSchema(fields=fields, description="Curriculum documents")
-
-        # Create collection
-        collection = Collection(
-            name=self.collection_name,
-            schema=schema,
-            using="default",
+        # Create collection with schema
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            dimension=384,
+            metric_type="L2",
+            schema={
+                "fields": [
+                    {"name": "id", "dtype": "VARCHAR", "params": {"max_length": 100}},
+                    {"name": "embedding", "dtype": "FLOAT_VECTOR", "params": {"dim": 384}},
+                    {"name": "content", "dtype": "VARCHAR", "params": {"max_length": 10000}},
+                    {"name": "document_type", "dtype": "VARCHAR", "params": {"max_length": 100}},
+                    {"name": "metadata", "dtype": "VARCHAR", "params": {"max_length": 5000}},
+                ],
+                "primary_field": "id",
+                "metric_type": "L2",
+            }
         )
 
         # Create index
-        index_params = {
-            "metric_type": "L2",
-            "index_type": "IVF_FLAT",
-            "params": {"nlist": 128},
-        }
-        collection.create_index(field_name="embedding", index_params=index_params)
+        self.client.create_index(
+            collection_name=self.collection_name,
+            field_name="embedding",
+            index_type="IVF_FLAT",
+            index_name="embedding_index",
+            metric_type="L2",
+            params={"nlist": 128},
+        )
 
     def _generate_mock_embedding(self, text: str) -> List[float]:
         """Generate simple embedding using hash (for mock mode).
@@ -143,14 +128,16 @@ class MilvusRAG:
 
         embedding = self._generate_mock_embedding(content)
 
-        collection = Collection(self.collection_name, using="default")
-        collection.insert(
-            [
-                [doc_id],
-                [embedding],
-                [content],
-                [doc_type],
-                [json.dumps(metadata or {})],
+        self.client.insert(
+            collection_name=self.collection_name,
+            data=[
+                {
+                    "id": doc_id,
+                    "embedding": embedding,
+                    "content": content,
+                    "document_type": doc_type,
+                    "metadata": json.dumps(metadata or {}),
+                }
             ]
         )
 
@@ -170,38 +157,35 @@ class MilvusRAG:
 
         query_embedding = self._generate_mock_embedding(query)
 
-        collection = Collection(self.collection_name, using="default")
-        collection.load()
-
-        # Build search filter
-        expr = None
+        # Build filter if needed
+        filter_expr = None
         if doc_type:
-            expr = f'document_type == "{doc_type}"'
+            filter_expr = f'document_type == "{doc_type}"'
 
-        # Search
-        results = collection.search(
+        # Search using MilvusClient
+        results = self.client.search(
+            collection_name=self.collection_name,
             data=[query_embedding],
-            anns_field="embedding",
-            param={"metric_type": "L2", "params": {"nprobe": 10}},
             limit=top_k,
-            expr=expr,
+            search_params={"metric_type": "L2"},
+            filter=filter_expr,
             output_fields=["content", "document_type", "metadata"],
         )
 
         # Format results
         formatted_results = []
-        for hit in results[0]:
-            formatted_results.append(
-                {
-                    "doc_id": hit.id,
-                    "content": hit.entity.get("content"),
-                    "document_type": hit.entity.get("document_type"),
-                    "metadata": json.loads(hit.entity.get("metadata", "{}")),
-                    "relevance_score": float(hit.score),
-                }
-            )
+        if results and len(results) > 0:
+            for hit in results[0]:
+                formatted_results.append(
+                    {
+                        "doc_id": hit.get("id"),
+                        "content": hit.get("content"),
+                        "document_type": hit.get("document_type"),
+                        "metadata": json.loads(hit.get("metadata", "{}")),
+                        "relevance_score": float(hit.get("distance", 0)),
+                    }
+                )
 
-        collection.release()
         return formatted_results
 
     def _mock_search(self, query: str, top_k: int) -> List[Dict[str, Any]]:
@@ -247,8 +231,10 @@ class MilvusRAG:
                 del self.mock_documents[doc_id]
             return
 
-        collection = Collection(self.collection_name, using="default")
-        collection.delete(expr=f'id == "{doc_id}"')
+        self.client.delete(
+            collection_name=self.collection_name,
+            filter=f'id == "{doc_id}"'
+        )
 
     def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a specific document.
@@ -262,12 +248,11 @@ class MilvusRAG:
         if self.mock_mode:
             return self.mock_documents.get(doc_id)
 
-        collection = Collection(self.collection_name, using="default")
-        collection.load()
-
-        results = collection.query(expr=f'id == "{doc_id}"', output_fields=["*"])
-
-        collection.release()
+        results = self.client.query(
+            collection_name=self.collection_name,
+            filter=f'id == "{doc_id}"',
+            output_fields=["*"]
+        )
 
         if results:
             return results[0]
@@ -286,15 +271,94 @@ class MilvusRAG:
                 "indexed": True,
             }
 
-        collection = Collection(self.collection_name, using="default")
+        # Get collection stats from Milvus
+        try:
+            stats = self.client.get_collection_stats(self.collection_name)
+            total_docs = stats.get("row_count", 0)
+        except:
+            total_docs = 0
+
         return {
             "mode": "milvus",
-            "total_documents": collection.num_entities,
+            "total_documents": total_docs,
             "collection_name": self.collection_name,
             "indexed": True,
         }
 
+    def list_all_documents(self) -> List[Dict[str, Any]]:
+        """List all stored documents/chunks.
+
+        Returns:
+            List of all documents with their metadata
+        """
+        if self.mock_mode:
+            result = []
+            for doc_id, doc in self.mock_documents.items():
+                result.append({
+                    "doc_id": doc_id,
+                    "content": doc["content"],
+                    "document_type": doc["document_type"],
+                    "metadata": doc.get("metadata", {}),
+                })
+            return result
+
+        # Query all documents
+        results = self.client.query(
+            collection_name=self.collection_name,
+            filter="",
+            output_fields=["id", "content", "document_type", "metadata"]
+        )
+
+        formatted_results = []
+        for doc in results:
+            formatted_results.append({
+                "doc_id": doc.get("id"),
+                "content": doc.get("content"),
+                "document_type": doc.get("document_type"),
+                "metadata": json.loads(doc.get("metadata", "{}")),
+            })
+
+        return formatted_results
+
+    def list_by_type(self, doc_type: str) -> List[Dict[str, Any]]:
+        """List all documents of a specific type.
+
+        Args:
+            doc_type: Document type to filter by
+
+        Returns:
+            List of documents matching the type
+        """
+        if self.mock_mode:
+            result = []
+            for doc_id, doc in self.mock_documents.items():
+                if doc["document_type"] == doc_type:
+                    result.append({
+                        "doc_id": doc_id,
+                        "content": doc["content"],
+                        "document_type": doc["document_type"],
+                        "metadata": doc.get("metadata", {}),
+                    })
+            return result
+
+        results = self.client.query(
+            collection_name=self.collection_name,
+            filter=f'document_type == "{doc_type}"',
+            output_fields=["id", "content", "document_type", "metadata"]
+        )
+
+        formatted_results = []
+        for doc in results:
+            formatted_results.append({
+                "doc_id": doc.get("id"),
+                "content": doc.get("content"),
+                "document_type": doc.get("document_type"),
+                "metadata": json.loads(doc.get("metadata", "{}")),
+            })
+
+        return formatted_results
+
     def close(self):
         """Close Milvus connection."""
-        if not self.mock_mode:
-            connections.disconnect(alias="default")
+        if not self.mock_mode and self.client:
+            self.client.close()

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: milvus_etcd
+    environment:
+      - ETCD_USE_GRPC_API_V3=true
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379
+
+  milvus:
+    image: milvusdb/milvus:v2.3.0
+    container_name: milvus_server
+    depends_on:
+      - etcd
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    environment:
+      COMMON_STORAGETYPE: local
+      MILVUS_COMMON_LOG_LEVEL: info
+      ETCD_ENDPOINTS: etcd:2379
+    volumes:
+      - milvus_data:/var/lib/milvus
+    command: ["milvus", "run", "standalone"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  milvus_data:
+    driver: local
+  etcd_data:
+    driver: local

@@ -1,136 +1,120 @@
 #!/usr/bin/env python
-"""Display metrics on REAL generated content with Milvus RAG context."""
+"""Display metrics from LangGraph orchestrator with Milvus RAG context.
 
-from server.orchestrator import Orchestrator
-from server.models import DocumentRequest
-from server.tools.evaluation_metrics import ContentEvaluator
+Shows performance metrics, RAG context retrieval, and quality scores.
+"""
+
+import asyncio
+from server.langgraph_orchestrator import LangGraphOrchestrator
 from server.tools.milvus_rag import MilvusRAG
+from server.logger import setup_logger
 
-print("=" * 80)
-print("EVALUATION METRICS WITH REAL MILVUS RAG + LLM-GENERATED CONTENT")
-print("=" * 80)
+logger = setup_logger(__name__)
 
-# Initialize RAG to fetch real curriculum
-print("\n[1] Initializing Milvus RAG (fetching curriculum)...")
-rag = MilvusRAG()
-curriculum_context = rag.search("Electrostatics electric charges", top_k=3)
-print(
-    f"    Fetched {len(curriculum_context)} curriculum documents from Milvus")
 
-# Show what curriculum context we got
-print("\n[2] Curriculum Context from Milvus:")
-print("-" * 80)
-for i, doc in enumerate(curriculum_context, 1):
-    print(f"\nDocument {i}: {doc.get('id', 'Unknown')}")
-    print(f"Content (first 200 chars): {doc.get('content', '')[:200]}...")
+async def show_metrics():
+    """Display metrics from document generation."""
+    print("\n" + "=" * 80)
+    print("📊 LANGGRAPH ORCHESTRATOR METRICS WITH MILVUS RAG")
+    print("=" * 80)
 
-# Generate content using the orchestrator
-print("\n" + "=" * 80)
-print("[3] Generating Study Plan Content with Orchestrator...")
-print("-" * 80)
+    # Initialize RAG
+    print("\n[1] Checking Milvus RAG System...")
+    rag = MilvusRAG()
+    stats = rag.get_stats()
 
-request = DocumentRequest(
-    request="Create a 3-day study plan for Electrostatics focusing on Coulomb's law and electric field",
-    metadata={"subject": "Physics", "level": "JEE", "scope": "Electrostatics"}
-)
+    print(f"    Mode: {stats.get('mode', 'unknown').upper()}")
+    print(f"    Total chunks stored: {stats.get('total_documents', 0)}")
+    print(f"    Indexed: {'✓ Yes' if stats.get('indexed') else '✗ No'}")
 
-orchestrator = Orchestrator()
-result = orchestrator.generate_document(request)
+    if rag.mock_mode:
+        print("\n    ⚠️  WARNING: Milvus in mock mode (no persistent storage)")
+        print("    Run: python setup_milvus.py --start")
+        print("    Then: python load_curriculum.py")
+        return
 
-print(f"✓ Document generated: {result.document_filename}")
-print(f"  Document type: {result.execution_plan.document_type}")
-print(f"  Outline: {result.execution_plan.outline}")
-print(f"  Success: {result.success}")
+    # Search for sample curriculum content
+    print("\n[2] Fetching RAG Context...")
+    search_query = "electrostatics electric field"
+    context = rag.search(search_query, top_k=2)
 
-# Build generated content from plan + tasks
-generated_content = f"{result.execution_plan.document_type}\n"
-generated_content += "\n".join(result.execution_plan.outline) + "\n"
-generated_content += "\n".join(
-    [f"Task {t.id}: {t.description}" for t in result.execution_plan.tasks])
+    if context:
+        print(f"    Found {len(context)} matching curriculum chunks for: '{search_query}'")
+        for i, chunk in enumerate(context, 1):
+            doc_id = chunk.get("doc_id", "unknown")
+            content_preview = chunk.get("content", "")[:100]
+            relevance = chunk.get("relevance_score", 0)
+            print(f"    {i}. {doc_id} (relevance: {relevance:.2f})")
+            print(f"       {content_preview}...")
+    else:
+        print(f"    No chunks found for: '{search_query}'")
 
-print("\n[4] Generated Content Preview:")
-print("-" * 80)
-print(generated_content[:500])
-print("...[content continues]...\n")
+    # Generate document using LangGraph orchestrator
+    print("\n[3] Generating Document with LangGraph...")
+    orchestrator = LangGraphOrchestrator()
 
-# Calculate metrics
-print("=" * 80)
-print("[5] CALCULATING METRICS ON GENERATED CONTENT")
-print("=" * 80)
+    try:
+        result = await orchestrator.generate_document(
+            request="Create a 2-day study plan for Electrostatics covering electric field and Coulomb's law",
+            metadata={
+                "subject": "Physics",
+                "level": "JEE",
+                "scope": "Electrostatics"
+            }
+        )
 
-# Combine curriculum context into one string
-combined_curriculum = " ".join([doc.get('content', '')
-                               for doc in curriculum_context])
+        print(f"    ✅ Success: {result.get('success', False)}")
+        print(f"    Sections generated: {result.get('sections_count', 0)}")
+        print(f"    Review iterations: {result.get('iterations', 0)}")
+        print(f"    Message history: {result.get('messages', 0)} messages")
 
-# ROUGE - how much overlap with curriculum
-print("\n[ROUGE] - Overlap between generated and curriculum:")
-rouge = ContentEvaluator.calculate_rouge(
-    generated_content, combined_curriculum)
-print(f"  ROUGE-1 (unigrams):    {rouge['rouge1']:.4f}")
-print(f"  ROUGE-2 (bigrams):     {rouge['rouge2']:.4f}")
-print(f"  ROUGE-L (subsequence): {rouge['rougeL']:.4f}")
-print(
-    f"  --> Generated content has {rouge['rouge1']*100:.1f}% word overlap with curriculum")
+        if result.get("error"):
+            print(f"    Error: {result['error']}")
 
-# BLEU - precision of match with curriculum
-print("\n[BLEU] - Precision of generated content vs curriculum:")
-bleu = ContentEvaluator.calculate_bleu(generated_content, combined_curriculum)
-print(f"  BLEU-1 (unigrams):     {bleu['bleu_1']:.4f}")
-print(f"  BLEU-2 (bigrams):      {bleu['bleu_2']:.4f}")
-print(f"  BLEU-3 (trigrams):     {bleu['bleu_3']:.4f}")
-print(f"  BLEU-4 (4-grams):      {bleu['bleu_4']:.4f}")
-print(f"  Final BLEU Score:      {bleu['bleu']:.4f}")
-print(f"  --> {bleu['bleu']*100:.1f}% precision match with curriculum")
+        if result.get("document_filename"):
+            print(f"    Output: {result['document_filename']}")
 
-# Groundedness - what % of generated text is grounded in curriculum
-print("\n[GROUNDEDNESS] - Is generated content grounded in curriculum?")
-groundedness = ContentEvaluator.calculate_groundedness(
-    generated_content, combined_curriculum)
-print(
-    f"  Groundedness Score:    {groundedness['groundedness']:.4f} ({groundedness['groundedness']*100:.1f}%)")
-print(
-    f"  Grounded tokens:       {groundedness['grounded_tokens']}/{groundedness['total_tokens']}")
-print(
-    f"  --> {groundedness['groundedness']*100:.1f}% of generated text appears in curriculum (non-hallucination score)")
+    except Exception as e:
+        logger.error(f"Generation failed: {e}")
+        print(f"    ❌ Error: {e}")
 
-# Context Utilization - how much of curriculum is used
-print("\n[CONTEXT UTILIZATION] - How much of fetched curriculum is used?")
-util = ContentEvaluator.calculate_context_utilization(
-    generated_content, combined_curriculum)
-print(
-    f"  Context Utilization:   {util['context_utilization']:.4f} ({util['context_utilization']*100:.1f}%)")
-print(
-    f"  Curriculum terms used: {util['unique_context_tokens_used']}/{util['total_context_tokens']}")
-print(
-    f"  --> Generated content uses {util['context_utilization']*100:.1f}% of available curriculum context")
+    # Display execution metrics
+    print("\n[4] Execution Summary")
+    print("    " + "-" * 76)
+    print("    LangGraph workflow:")
+    print("      • Plan Node: Creates document outline and structure")
+    print("      • Write Node: Generates content sections")
+    print("      • Review Node: Evaluates quality and identifies issues")
+    print("      • Refine Node: Iteratively improves based on feedback")
+    print("      • Generate Node: Creates final DOCX output")
+    print("\n    RAG Integration:")
+    print(f"      • Retrieves curriculum context from Milvus")
+    print(f"      • Enhances writer with domain knowledge")
+    print(f"      • Grounds generation in curriculum")
 
-# Quality scores from orchestrator
-print("\n" + "=" * 80)
-print("[6] QUALITY SCORES FROM ORCHESTRATOR REVIEW")
-print("=" * 80)
-if result.quality_scores:
-    print(f"  Relevance:    {result.quality_scores.relevance}/5")
-    print(f"  Completeness: {result.quality_scores.completeness}/5")
-    print(f"  Coherence:    {result.quality_scores.coherence}/5")
-    print(f"  Structure:    {result.quality_scores.structure}/5")
-    print(f"  Overall:      {result.quality_scores.overall}/5")
-else:
-    print("  No quality scores available")
+    rag.close()
 
-# Execution metrics
-print("\n" + "=" * 80)
-print("[7] EXECUTION METRICS")
-print("=" * 80)
-print(f"  Planner latency:       {result.metrics.planner_latency_ms:.0f} ms")
-print(f"  Writer latency:        {result.metrics.writer_latency_ms:.0f} ms")
-print(f"  Reviewer latency:      {result.metrics.reviewer_latency_ms:.0f} ms")
-print(
-    f"  DOCX generation:       {result.metrics.docx_generation_latency_ms:.0f} ms")
-print(
-    f"  Total execution time:  {result.metrics.total_execution_time_ms:.0f} ms ({result.metrics.total_execution_time_ms/1000:.1f}s)")
-print(f"  Review iterations:     {result.metrics.review_iterations}")
+    print("\n" + "=" * 80)
+    print("✅ Metrics display complete")
+    print("=" * 80)
+    print("\n💡 Next steps:")
+    print("   • Run: python run_server.py")
+    print("   • Test API: curl http://localhost:8000/api/generate")
+    print("   • View chunks: python view_chunks.py --stats")
 
-print("\n" + "=" * 80)
-print("[COMPLETE] Real-world Metrics Display Finished")
-print("=" * 80)
-print(f"\nDocument saved to: output/{result.document_filename}")
+
+def main():
+    """Main entry point."""
+    print("🚀 Starting LangGraph Orchestrator Metrics Demo...\n")
+
+    try:
+        asyncio.run(show_metrics())
+    except KeyboardInterrupt:
+        print("\n\n⏹️  Cancelled by user")
+    except Exception as e:
+        logger.error(f"Failed: {e}")
+        print(f"\n❌ Error: {e}")
+
+
+if __name__ == "__main__":
+    main()
