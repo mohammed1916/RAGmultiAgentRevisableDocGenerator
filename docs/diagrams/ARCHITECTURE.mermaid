@@ -1,73 +1,114 @@
 graph TB
 
-subgraph Frontend
+%% =========================
+%% Presentation Layer
+%% =========================
+subgraph Presentation["Presentation Layer"]
     UI["Chat Interface"]
     Files["Generated .docx Files"]
 end
 
-subgraph Backend
+%% =========================
+%% API Layer
+%% =========================
+subgraph API["API Layer"]
     ChatAPI["Chat API"]
     FileAPI["File API"]
 end
 
-subgraph Orchestrators
-    ChatOrch["ChatOrchestrator<br/>(LLM-driven chat)"]
-    LangGraphOrch["LangGraphOrchestrator<br/>(Plan → Write → Review<br/>→ Refine → Generate)"]
+%% =========================
+%% Orchestration Layer
+%% =========================
+subgraph Orch["Orchestration Layer"]
+    ChatOrch["ChatOrchestrator<br/>(Conversation Manager)"]
+    LangGraph["LangGraphOrchestrator<br/>(Plan → Write → Review → Generate)"]
 end
 
-subgraph CurrentAgents
-    Planner["PlannerAgent"]
-    Writer["WriterAgent"]
-    Reviewer["ReviewerAgent"]
+%% =========================
+%% AI Agents
+%% =========================
+subgraph Agents["AI Agent Layer"]
+    Planner["Planner Agent"]
+    Writer["Writer Agent"]
+    Reviewer["Reviewer Agent"]
 end
 
-subgraph RAG
-    Embed["Sentence Transformer<br/>all-MiniLM-L6-v2"]
-    Milvus["Milvus Vector DB<br/>L2 Semantic Search"]
+%% =========================
+%% Knowledge Layer
+%% =========================
+subgraph Knowledge["Knowledge Layer (RAG)"]
+    Embed["SentenceTransformer<br/>all-MiniLM-L6-v2"]
+    Milvus["Milvus Vector Database"]
+    Context["Retrieved Curriculum Context"]
 end
 
-subgraph LLM
-    Ollama["Ollama LLM"]
+%% =========================
+%% LLM Layer
+%% =========================
+subgraph LLM["LLM Layer"]
+    Ollama["Ollama"]
 end
 
-subgraph DocumentGeneration
-    Markdown["Markdown Formatter"]
-    DOCX["DOCX Generator"]
-    Word["Word Document"]
+%% =========================
+%% Document Generation
+%% =========================
+subgraph Docs["Document Generation"]
+    Structure["DocumentStructure"]
+    Markdown["MarkdownFormatter"]
+    DOCX["DOCXGenerator"]
+    Word["Microsoft Word (.docx)"]
 end
 
-subgraph AvailableComponents["Available (Not Yet Integrated)"]
+%% =========================
+%% Future Components
+%% =========================
+subgraph Future["Future Integration"]
     Extractor["Progress Extractor"]
+    State["Student State"]
     Validator["Progress Validator"]
-    StateAwarePlanner["StateAwarePlanner"]
+    SAP["State-Aware Planner"]
 end
+
+%% =========================
+%% Flow
+%% =========================
 
 UI --> ChatAPI
-ChatAPI --> ChatOrch
-ChatAPI --> LangGraphOrch
 
-ChatOrch --> Milvus
+ChatAPI --> ChatOrch
+ChatAPI --> LangGraph
+
 ChatOrch --> Ollama
 
-LangGraphOrch --> Planner
-LangGraphOrch --> Writer
-LangGraphOrch --> Reviewer
+LangGraph --> Planner
 
-Planner --> Ollama
 Planner --> Embed
 Embed --> Milvus
+Milvus --> Context
+Context --> Planner
+
+Planner --> Ollama
+
+Planner --> Writer
 
 Writer --> Ollama
-Writer --> Embed
-Embed --> Milvus
 
-Reviewer --> Ollama
+Writer --> Structure
 
-Writer --> Markdown
+Structure --> Reviewer
+
+Reviewer -->|Approved| Markdown
+Reviewer -->|Revision Needed| Writer
+
 Markdown --> DOCX
 DOCX --> Word
 
 Word --> FileAPI
 FileAPI --> Files
 
-style AvailableComponents fill:#f9f,stroke:#f0f,opacity:0.3
+%% Future
+Extractor -.-> State
+State -.-> SAP
+Validator -.-> SAP
+
+style Future fill:#eeeeee,stroke:#888888,stroke-dasharray: 5 5
