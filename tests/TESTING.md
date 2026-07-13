@@ -184,12 +184,11 @@ pytest -m "not slow" # All except slow
 
 The following outdated tests were removed:
 
-| Test | Reason |
-|------|--------|
-| `test_agents.py` | Superseded by LangGraph E2E tests |
-| `test_integration.py` | Replaced with LangGraph E2E tests |
-| `test_milvus_chunks_view.py` | Utility tests, not critical |
-| `test_mock_chunks.py` | Mock data tests, not needed with real data |
+| Test                         | Reason                            |
+| ---------------------------- | --------------------------------- |
+| `test_agents.py`             | Superseded by LangGraph E2E tests |
+| `test_integration.py`        | Replaced with LangGraph E2E tests |
+| `test_milvus_chunks_view.py` | Utility tests, not critical       |
 
 ## Test Coverage
 
