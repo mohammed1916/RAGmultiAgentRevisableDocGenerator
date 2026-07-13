@@ -481,8 +481,8 @@ Missing Student Progress:
 
 Missing Curriculum Data:
 - Question: "Should I fetch curriculum from online sources?"
-- Fallback: Uses mock curriculum data
-- Impact: Less personalized but still functional
+- Fallback: System falls back to keyword matching (non-semantic)
+- Impact: Still works but without semantic search quality
 
 Unrealistic Study Plan:
 - Question: "Your plan requires X hours/day, but you set Y. Adjust plan?"
@@ -698,9 +698,10 @@ Try: "I completed Algebra" or "I mastered Algebra"
 rag_app/
 ├── scripts/                           (Utility scripts)
 │   ├── setup_milvus.py               (Milvus Docker management)
-│   ├── load_curriculum.py            (Load data into Milvus)
-│   ├── view_chunks.py                (Inspect chunks)
-│   └── show_metrics.py               (Display metrics)
+│   ├── load_curriculum.py            (Load curriculum with real semantic embeddings into Milvus)
+│   ├── analyze_milvus.py             (Analyze collection quality and retrieval)
+│   ├── show_metrics.py               (Display RAG quality metrics)
+│   └── verify_langsmith.py           (Verify LangSmith tracing config)
 │
 ├── server/                            (Application core)
 │   ├── api/
@@ -715,8 +716,7 @@ rag_app/
 │   ├── base/
 │   │   ├── exceptions.py             (Custom exceptions)
 │   │   ├── models.py                 (Pydantic models)
-│   │   ├── logger.py                 (Logging setup)
-│   │   └── mock_data.py              (Mock data for testing)
+│   │   └── logger.py                 (Logging setup)
 │   ├── agents/                       (LangGraph agents)
 │   │   ├── planner.py
 │   │   ├── writer.py
@@ -768,10 +768,12 @@ Python 3.10+:
 - **FastAPI/Uvicorn** - API server
 - **Pydantic** - Data validation
 - **python-docx** - Word document generation
-- **LangChain** (v0.1.16+) - Agent framework (NEW)
-- **LangGraph** (v0.0.27+) - State machine orchestration (NEW)
-- **Ollama** (v0.1.34+) - Local LLM interface (NEW)
-- **pymilvus** (v2.3.7+) - Vector database (optional, mock mode works)
+- **LangChain** (v0.1.16+) - Agent framework
+- **LangGraph** (v0.0.27+) - State machine orchestration
+- **Ollama** (v0.1.34+) - Local LLM interface
+- **sentence-transformers** (v2.2.2+) - Real semantic embeddings for RAG
+- **pymilvus** (v2.3.7+) - Vector database
+- **langsmith** (v0.1.48+) - Observability and tracing (optional)
 - **requests** - HTTP client
 - **pytest** - Testing
 
