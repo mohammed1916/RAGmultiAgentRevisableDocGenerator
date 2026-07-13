@@ -288,6 +288,7 @@ class MilvusRAG:
         results = self.client.query(
             collection_name=self.collection_name,
             filter="",
+            limit=16384,  # Max limit allowed by Milvus
             output_fields=["id", "content", "document_type", "metadata"]
         )
 
