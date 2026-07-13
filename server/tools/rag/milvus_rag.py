@@ -48,22 +48,28 @@ class MilvusRAG:
         self.collection_name = collection_name
         self.client = None
         self.embedding_model = None
+        self.embedding_model_name = embedding_model
         self.mock_mode = False
         self.mock_documents = {}
-
-        # Initialize embedding model
-        try:
-            self.embedding_model = SentenceTransformer(embedding_model)
-        except Exception as e:
-            print(f"Warning: Could not load embedding model: {e}")
-            print("Install with: pip install sentence-transformers")
 
         try:
             self._connect()
             self._create_collection()
+            # Only load embedding model if Milvus connected successfully
+            self._load_embedding_model()
         except Exception as e:
             print(f"Milvus connection failed: {e}. Using mock mode.")
             self.mock_mode = True
+
+    def _load_embedding_model(self):
+        """Lazily load embedding model when needed (not in mock mode)."""
+        if self.embedding_model is None and not self.mock_mode:
+            try:
+                self.embedding_model = SentenceTransformer(self.embedding_model_name)
+            except Exception as e:
+                print(f"Warning: Could not load embedding model: {e}")
+                print("Install with: pip install sentence-transformers")
+                self.mock_mode = True
 
     def _connect(self):
         """Connect to Milvus server with timeout."""
@@ -97,6 +103,10 @@ class MilvusRAG:
         Returns:
             384-dimensional semantic embedding vector
         """
+        # Lazily load model if not in mock mode
+        if self.embedding_model is None and not self.mock_mode:
+            self._load_embedding_model()
+
         if not self.embedding_model:
             raise RuntimeError("Embedding model not initialized")
 
@@ -164,7 +174,7 @@ class MilvusRAG:
             List of relevant documents with relevance scores
         """
         if self.mock_mode:
-            return self._mock_search(query, top_k)
+            return self._mock_search(query, doc_type, top_k)
 
         # Generate semantic embedding for query
         query_vector = self._get_embedding(query)
@@ -201,11 +211,12 @@ class MilvusRAG:
 
         return formatted_results
 
-    def _mock_search(self, query: str, top_k: int) -> List[Dict[str, Any]]:
+    def _mock_search(self, query: str, doc_type: str = None, top_k: int = 5) -> List[Dict[str, Any]]:
         """Mock search (keyword matching only).
 
         Args:
             query: Search query
+            doc_type: Filter by document type (optional)
             top_k: Number of results
 
         Returns:
@@ -215,6 +226,10 @@ class MilvusRAG:
         results = []
 
         for doc_id, doc in self.mock_documents.items():
+            # Apply doc_type filter if specified
+            if doc_type and doc["document_type"] != doc_type:
+                continue
+
             content = doc["content"].lower()
             score = sum(1 for term in query_terms if term in content)
 

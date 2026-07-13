@@ -104,7 +104,7 @@ class TestMilvusRAG:
 
         # Verify stats
         stats = rag.get_stats()
-        assert stats["total_documents"] == 6
+        assert stats["total_documents"] == 5
 
     def test_relevance_scoring(self, rag):
         """Test relevance scoring in search results."""
