@@ -3,7 +3,6 @@
 from .exceptions import *
 from .models import *
 from ..base.logger import setup_logger
-from .mock_data import MockData
 
 __all__ = [
     # Exceptions
@@ -22,6 +21,4 @@ __all__ = [
     "StudyPlan",
     # Logger
     "setup_logger",
-    # Mock data
-    "MockData",
 ]

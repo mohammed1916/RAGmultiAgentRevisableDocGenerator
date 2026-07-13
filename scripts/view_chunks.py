@@ -24,7 +24,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from server.tools import MilvusRAG
-from server.base.mock_data import MockData
+from server.tools.fixtures import MockData
 
 
 def print_chunk(chunk: dict, verbose: bool = False):

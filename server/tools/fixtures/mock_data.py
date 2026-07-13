@@ -1,7 +1,7 @@
 """Mock data for testing document generation without Ollama."""
 
 from typing import List, Dict, Any
-from .models import ExecutionPlan, Task, DocumentSection
+from server.base import ExecutionPlan, Task, DocumentSection
 
 
 class MockData:
