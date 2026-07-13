@@ -28,7 +28,7 @@ end
 %% AI Agents
 %% =========================
 subgraph Agents["AI Agent Layer"]
-    Planner["Planner Agent"]
+    Planner["Planner Agent<br/>(Current)"]
     Writer["Writer Agent"]
     Reviewer["Reviewer Agent"]
 end
@@ -60,13 +60,13 @@ subgraph Docs["Document Generation"]
 end
 
 %% =========================
-%% Future Components
+%% State Management Layer
 %% =========================
-subgraph Future["Future Integration"]
-    Extractor["Progress Extractor"]
-    State["Student State"]
-    Validator["Progress Validator"]
-    SAP["State-Aware Planner"]
+subgraph StateManagement["State Management Layer"]
+    Extractor["Progress Extractor<br/>(Parse progress claims)"]
+    Validator["Progress Validator<br/>(Verify claims)"]
+    State["StudentState<br/>(Learned topics,<br/>timeline, progress)"]
+    SAP["State-Aware Planner<br/>(Respects learned topics)"]
 end
 
 %% =========================
@@ -80,16 +80,19 @@ ChatAPI --> LangGraph
 
 ChatOrch --> Ollama
 
-LangGraph --> Planner
+%% State extraction and management
+LangGraph --> Extractor
+Extractor --> Validator
+Validator --> State
+State --> SAP
 
-Planner --> Embed
+%% Planning with state awareness
+SAP --> Embed
 Embed --> Milvus
 Milvus --> Context
-Context --> Planner
+Context --> SAP
 
-Planner --> Ollama
-
-Planner --> Writer
+SAP --> Writer
 
 Writer --> Ollama
 
@@ -106,9 +109,4 @@ DOCX --> Word
 Word --> FileAPI
 FileAPI --> Files
 
-%% Future
-Extractor -.-> State
-State -.-> SAP
-Validator -.-> SAP
-
-style Future fill:#eeeeee,stroke:#888888,stroke-dasharray: 5 5
+style StateManagement fill:#e1f5ff,stroke:#01579b,stroke-width:2px
