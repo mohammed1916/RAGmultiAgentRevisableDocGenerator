@@ -8,6 +8,7 @@ import asyncio
 import sys
 import io
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 from docx import Document
@@ -18,6 +19,19 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 
 # Add parent directory to path so we can import server modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Initialize LangSmith BEFORE importing LangChain modules
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent / ".env")  # Load .env file
+
+if os.getenv("LANGSMITH_ENABLED", "false").lower() == "true":
+    langsmith_key = os.getenv("LANGSMITH_API_KEY")
+    if langsmith_key:
+        os.environ["LANGCHAIN_TRACING_V2"] = "true"
+        os.environ["LANGCHAIN_API_KEY"] = langsmith_key
+        os.environ["LANGCHAIN_ENDPOINT"] = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+        os.environ["LANGCHAIN_PROJECT"] = os.getenv("LANGSMITH_PROJECT", "document-generation")
+        print(f"[LANGSMITH] Tracing initialized for project: {os.environ['LANGCHAIN_PROJECT']}")
 
 from server.core import LangGraphOrchestrator
 from server.tools import MilvusRAG
