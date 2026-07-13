@@ -236,22 +236,32 @@ docker-compose down -v
 
 ## Programmatically Load Documents
 
+Use the CLI script instead:
+
+```bash
+python load_curriculum.py
+```
+
+Or programmatically with real embeddings:
+
 ```python
 from server.tools import MilvusRAG
-from server.base import MockData
 
-rag = MilvusRAG()
+rag = MilvusRAG()  # Uses sentence-transformers for real embeddings
 
-chunks = MockData.get_mock_chunks_jee()
+# Add document with semantic embedding
+rag.add_document(
+    doc_id="doc_1",
+    content="Calculus is the study of continuous change...",
+    doc_type="mathematics",
+    metadata={"topic": "Calculus"}
+)
 
-for chunk in chunks:
-    rag.add_document(
-        doc_id=chunk["chunk_id"],
-        content=chunk["chunk_text"],
-        doc_type=chunk["document_id"],
-        metadata=chunk["metadata"],
-    )
+# Search semantically
+results = rag.search("derivatives and limits", top_k=5)
 ```
+
+Note: Embeddings are real semantic vectors from sentence-transformers, not fake hashes.
 
 ---
 
