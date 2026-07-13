@@ -9,6 +9,16 @@ load_dotenv()
 
 
 @dataclass
+class LangSmithConfig:
+    """LangSmith tracing and observability configuration."""
+
+    enabled: bool = os.getenv("LANGSMITH_ENABLED", "false").lower() == "true"
+    api_key: str = os.getenv("LANGSMITH_API_KEY", "")
+    endpoint: str = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+    project: str = os.getenv("LANGSMITH_PROJECT", "specbot-rag")
+
+
+@dataclass
 class OllamaConfig:
     """Ollama service configuration.
 
@@ -29,6 +39,7 @@ class AppConfig:
     """Application configuration."""
 
     ollama: OllamaConfig = None
+    langsmith: LangSmithConfig = None
     max_review_iterations: int = 2
     document_output_dir: str = "output"
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
@@ -36,6 +47,8 @@ class AppConfig:
     def __post_init__(self):
         if self.ollama is None:
             self.ollama = OllamaConfig()
+        if self.langsmith is None:
+            self.langsmith = LangSmithConfig()
         os.makedirs(self.document_output_dir, exist_ok=True)
 
 

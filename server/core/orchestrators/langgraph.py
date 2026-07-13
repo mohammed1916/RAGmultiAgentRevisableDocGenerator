@@ -15,6 +15,7 @@ from .base import Orchestrator
 from ...base.logger import setup_logger
 from ...base.models import DocumentRequest, ExecutionPlan, DocumentSection, ReviewFeedback
 from ...config import config
+from ...tools.utils.langsmith_tracer import enable_langsmith_tracing
 
 logger = setup_logger(__name__)
 
@@ -326,6 +327,7 @@ class LangGraphOrchestrator:
 
     def __init__(self):
         """Initialize LangGraph workflow."""
+        enable_langsmith_tracing("document-generation")
         self.graph = self._build_graph()
         logger.info("LangGraph orchestrator initialized")
 
