@@ -1,41 +1,62 @@
-"""Milvus-based RAG system for curriculum-aware document retrieval.
+"""Milvus-based RAG system with real semantic embeddings.
 
-Uses modern MilvusClient API (PyMilvus 3.0+), replacing deprecated ORM-style API.
+Uses sentence-transformers for genuine semantic embeddings,
+Milvus for vector storage and ANN search.
 """
 
 import json
 import socket
 from typing import List, Dict, Any, Optional
-import hashlib
 
 try:
     from pymilvus import MilvusClient
 except ImportError:
     print("WARNING: pymilvus not installed. Install with: pip install pymilvus>=3.0")
 
+try:
+    from sentence_transformers import SentenceTransformer
+except ImportError:
+    print("WARNING: sentence-transformers not installed. Install with: pip install sentence-transformers")
+
 
 class MilvusRAG:
-    """Milvus-based RAG for semantic search on curriculum data using modern MilvusClient API."""
+    """Milvus-based RAG with real semantic embeddings from sentence-transformers.
+
+    Features:
+    - Real embeddings: sentence-transformers (384-dim semantic vectors)
+    - Real vector database: Milvus with ANN indexing
+    - Genuine semantic search: cosine/L2 similarity on meaningful vectors
+    """
 
     def __init__(
         self,
         host: str = "localhost",
         port: int = 19530,
         collection_name: str = "documents",
+        embedding_model: str = "all-MiniLM-L6-v2",
     ):
-        """Initialize Milvus RAG system.
+        """Initialize Milvus RAG with semantic embeddings.
 
         Args:
             host: Milvus server host
             port: Milvus server port
             collection_name: Collection name for documents
+            embedding_model: Sentence-transformers model to use (384-dim)
         """
         self.host = host
         self.port = port
         self.collection_name = collection_name
         self.client = None
+        self.embedding_model = None
         self.mock_mode = False
         self.mock_documents = {}
+
+        # Initialize embedding model
+        try:
+            self.embedding_model = SentenceTransformer(embedding_model)
+        except Exception as e:
+            print(f"Warning: Could not load embedding model: {e}")
+            print("Install with: pip install sentence-transformers")
 
         try:
             self._connect()
@@ -46,7 +67,6 @@ class MilvusRAG:
 
     def _connect(self):
         """Connect to Milvus server with timeout."""
-        # Quick check if server is reachable
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(2)
         try:
@@ -56,44 +76,47 @@ class MilvusRAG:
         finally:
             sock.close()
 
-        # Initialize MilvusClient (modern API)
         self.client = MilvusClient(f"http://{self.host}:{self.port}")
 
     def _create_collection(self):
         """Create collection schema if it doesn't exist."""
-        # Only create if it doesn't already exist
         if not self.client.has_collection(self.collection_name):
-            # Create collection with MilvusClient 3.0+ API (simplified)
-            # Using auto_id=True for ID generation, simple schema
             self.client.create_collection(
                 collection_name=self.collection_name,
-                dimension=384,
-                metric_type="L2",
+                dimension=384,  # sentence-transformers default
+                metric_type="L2",  # L2 distance for semantic similarity
                 auto_id=True,
             )
 
-    def _generate_mock_embedding(self, text: str) -> List[float]:
-        """Generate simple embedding using hash (for mock mode).
+    def _get_embedding(self, text: str) -> List[float]:
+        """Generate semantic embedding from text.
 
         Args:
             text: Text to embed
 
         Returns:
-            384-dimensional embedding vector
+            384-dimensional semantic embedding vector
         """
-        hash_val = int(hashlib.md5(text.encode()).hexdigest(), 16)
-        embedding = []
-        for i in range(384):
-            embedding.append(float((hash_val + i) % 1000) / 1000.0)
-        return embedding
+        if not self.embedding_model:
+            raise RuntimeError("Embedding model not initialized")
 
-    def add_document(self, doc_id: str, content: str, doc_type: str, metadata: Dict[str, Any] = None):
-        """Add document to Milvus.
+        # Generate embedding
+        embedding = self.embedding_model.encode(text, convert_to_numpy=True)
+        return embedding.tolist()
+
+    def add_document(
+        self,
+        doc_id: str,
+        content: str,
+        doc_type: str,
+        metadata: Dict[str, Any] = None,
+    ):
+        """Add document to Milvus with semantic embedding.
 
         Args:
-            doc_id: Document ID
-            content: Document content
-            doc_type: Type of document (e.g., 'jee_math', 'cbse_physics')
+            doc_id: Document ID (stored in metadata)
+            content: Document content to embed
+            doc_type: Type of document
             metadata: Optional metadata dictionary
         """
         if self.mock_mode:
@@ -105,9 +128,10 @@ class MilvusRAG:
             }
             return
 
-        embedding = self._generate_mock_embedding(content)
+        # Generate real semantic embedding
+        vector = self._get_embedding(content)
 
-        # Merge doc_id into metadata
+        # Store doc_id in metadata (not in Milvus auto_id field)
         meta = metadata or {}
         meta["doc_id"] = doc_id
 
@@ -115,39 +139,45 @@ class MilvusRAG:
             collection_name=self.collection_name,
             data=[
                 {
-                    "vector": embedding,
+                    "vector": vector,
                     "content": content,
                     "document_type": doc_type,
                     "metadata": json.dumps(meta),
                 }
-            ]
+            ],
         )
 
-    def search(self, query: str, doc_type: str = None, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Search for relevant documents.
+    def search(
+        self,
+        query: str,
+        doc_type: str = None,
+        top_k: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Search for relevant documents using semantic similarity.
 
         Args:
-            query: Search query
+            query: Search query (will be embedded)
             doc_type: Filter by document type (optional)
             top_k: Number of top results
 
         Returns:
-            List of relevant documents
+            List of relevant documents with relevance scores
         """
         if self.mock_mode:
             return self._mock_search(query, top_k)
 
-        query_embedding = self._generate_mock_embedding(query)
+        # Generate semantic embedding for query
+        query_vector = self._get_embedding(query)
 
         # Build filter if needed
         filter_expr = None
         if doc_type:
             filter_expr = f'document_type == "{doc_type}"'
 
-        # Search using MilvusClient
+        # Semantic search in Milvus
         results = self.client.search(
             collection_name=self.collection_name,
-            data=[query_embedding],
+            data=[query_vector],
             limit=top_k,
             search_params={"metric_type": "L2"},
             filter=filter_expr,
@@ -158,12 +188,13 @@ class MilvusRAG:
         formatted_results = []
         if results and len(results) > 0:
             for hit in results[0]:
+                meta = json.loads(hit.get("metadata", "{}"))
                 formatted_results.append(
                     {
-                        "doc_id": hit.get("id"),
+                        "doc_id": meta.get("doc_id"),
                         "content": hit.get("content"),
                         "document_type": hit.get("document_type"),
-                        "metadata": json.loads(hit.get("metadata", "{}")),
+                        "metadata": meta,
                         "relevance_score": float(hit.get("distance", 0)),
                     }
                 )
@@ -171,14 +202,14 @@ class MilvusRAG:
         return formatted_results
 
     def _mock_search(self, query: str, top_k: int) -> List[Dict[str, Any]]:
-        """Mock search for testing without Milvus.
+        """Mock search (keyword matching only).
 
         Args:
             query: Search query
             top_k: Number of results
 
         Returns:
-            Mock search results
+            Mock search results (keyword-based, not semantic)
         """
         query_terms = set(query.lower().split())
         results = []
@@ -198,7 +229,6 @@ class MilvusRAG:
                     }
                 )
 
-        # Sort by relevance and return top_k
         results.sort(key=lambda x: x["relevance_score"], reverse=True)
         return results[:top_k]
 
@@ -215,7 +245,7 @@ class MilvusRAG:
 
         self.client.delete(
             collection_name=self.collection_name,
-            filter=f'id == "{doc_id}"'
+            filter=f'metadata like "%{doc_id}%"',
         )
 
     def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
@@ -232,8 +262,9 @@ class MilvusRAG:
 
         results = self.client.query(
             collection_name=self.collection_name,
-            filter=f'id == "{doc_id}"',
-            output_fields=["*"]
+            filter=f'metadata like "%{doc_id}%"',
+            limit=1,
+            output_fields=["*"],
         )
 
         if results:
@@ -241,10 +272,10 @@ class MilvusRAG:
         return None
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get index statistics.
+        """Get collection statistics.
 
         Returns:
-            Index statistics
+            Collection statistics
         """
         if self.mock_mode:
             return {
@@ -253,7 +284,6 @@ class MilvusRAG:
                 "indexed": True,
             }
 
-        # Get collection stats from Milvus
         try:
             stats = self.client.get_collection_stats(self.collection_name)
             total_docs = stats.get("row_count", 0)
@@ -265,10 +295,12 @@ class MilvusRAG:
             "total_documents": total_docs,
             "collection_name": self.collection_name,
             "indexed": True,
+            "embedding_model": "all-MiniLM-L6-v2",
+            "embedding_dimension": 384,
         }
 
     def list_all_documents(self) -> List[Dict[str, Any]]:
-        """List all stored documents/chunks.
+        """List all stored documents.
 
         Returns:
             List of all documents with their metadata
@@ -276,72 +308,39 @@ class MilvusRAG:
         if self.mock_mode:
             result = []
             for doc_id, doc in self.mock_documents.items():
-                result.append({
-                    "doc_id": doc_id,
-                    "content": doc["content"],
-                    "document_type": doc["document_type"],
-                    "metadata": doc.get("metadata", {}),
-                })
+                result.append(
+                    {
+                        "doc_id": doc_id,
+                        "content": doc["content"],
+                        "document_type": doc["document_type"],
+                        "metadata": doc.get("metadata", {}),
+                    }
+                )
             return result
 
         # Query all documents
         results = self.client.query(
             collection_name=self.collection_name,
             filter="",
-            limit=16384,  # Max limit allowed by Milvus
-            output_fields=["id", "content", "document_type", "metadata"]
+            limit=16384,
+            output_fields=["id", "content", "document_type", "metadata"],
         )
 
         formatted_results = []
         for doc in results:
-            formatted_results.append({
-                "doc_id": doc.get("id"),
-                "content": doc.get("content"),
-                "document_type": doc.get("document_type"),
-                "metadata": json.loads(doc.get("metadata", "{}")),
-            })
-
-        return formatted_results
-
-    def list_by_type(self, doc_type: str) -> List[Dict[str, Any]]:
-        """List all documents of a specific type.
-
-        Args:
-            doc_type: Document type to filter by
-
-        Returns:
-            List of documents matching the type
-        """
-        if self.mock_mode:
-            result = []
-            for doc_id, doc in self.mock_documents.items():
-                if doc["document_type"] == doc_type:
-                    result.append({
-                        "doc_id": doc_id,
-                        "content": doc["content"],
-                        "document_type": doc["document_type"],
-                        "metadata": doc.get("metadata", {}),
-                    })
-            return result
-
-        results = self.client.query(
-            collection_name=self.collection_name,
-            filter=f'document_type == "{doc_type}"',
-            output_fields=["id", "content", "document_type", "metadata"]
-        )
-
-        formatted_results = []
-        for doc in results:
-            formatted_results.append({
-                "doc_id": doc.get("id"),
-                "content": doc.get("content"),
-                "document_type": doc.get("document_type"),
-                "metadata": json.loads(doc.get("metadata", "{}")),
-            })
+            meta = json.loads(doc.get("metadata", "{}"))
+            formatted_results.append(
+                {
+                    "doc_id": meta.get("doc_id"),
+                    "content": doc.get("content"),
+                    "document_type": doc.get("document_type"),
+                    "metadata": meta,
+                }
+            )
 
         return formatted_results
 
     def close(self):
         """Close Milvus connection."""
-        if not self.mock_mode and self.client:
+        if self.client:
             self.client.close()
