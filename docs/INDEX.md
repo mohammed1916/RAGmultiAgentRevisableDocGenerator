@@ -27,7 +27,7 @@ docs/
 
 ---
 
-## Guides (11 documents)
+## Guides (12 documents)
 
 ### Setup & Configuration
 - **[guides/GETTING_STARTED.md](guides/GETTING_STARTED.md)** - Quick start, installation, first run
@@ -61,6 +61,14 @@ docs/
   - Demo vs. production mode
 
 ### Data Inspection & Debugging
+- **[guides/milvus_analyzer_guide.md](guides/milvus_analyzer_guide.md)** - Production analyzer for collection quality (NEW!)
+  - Real data analysis (not mocks)
+  - Collection statistics and quality metrics
+  - Metadata distribution analysis
+  - Embedding quality analysis
+  - Retrieval quality testing
+  - JSON export for automation
+  
 - **[guides/CHUNK_VIEWER_GUIDE.md](guides/CHUNK_VIEWER_GUIDE.md)** - Complete guide to viewing/searching chunks
   - All `view_chunks.py` commands and options
   - Search workflows
@@ -121,6 +129,12 @@ Located in: `samples/`
 3. Run tests: `python scripts/test_rag_quality.py`
 4. Check results: `cat output/test_results/quality_test_results.json`
 
+### I want to analyze my Milvus collection
+1. Read: [guides/milvus_analyzer_guide.md](guides/milvus_analyzer_guide.md)
+2. Run: `python scripts/analyze_milvus.py`
+3. Test retrieval: `python scripts/analyze_milvus.py --query "topic1" --query "topic2"`
+4. Export: `python scripts/analyze_milvus.py --output report.json`
+
 ### I want to view chunks in Milvus
 1. Read: [guides/CHUNK_VIEWER_GUIDE.md](guides/CHUNK_VIEWER_GUIDE.md)
 2. Check status: `python scripts/view_chunks.py --stats`
@@ -160,6 +174,14 @@ python scripts/verify_langsmith.py          # Check LangSmith configuration (req
 # View traces at: https://smith.langchain.com/
 ```
 
+### Analyze & Inspect Collection
+```bash
+python scripts/analyze_milvus.py                   # Full analysis report
+python scripts/analyze_milvus.py --no-embeddings   # Skip embeddings (faster)
+python scripts/analyze_milvus.py --query "topic1" --query "topic2"  # Test retrieval
+python scripts/analyze_milvus.py --output report.json  # Export to JSON
+```
+
 ### View & Search Chunks
 ```bash
 python scripts/view_chunks.py --stats       # Check Milvus status
@@ -186,7 +208,7 @@ milvus start                               # Start Milvus database
 
 | Category | Files | Location |
 |----------|-------|----------|
-| Documentation Guides | 11 .md files | `guides/` |
+| Documentation Guides | 12 .md files | `guides/` |
 | Schema Definitions | 1 .json file | `schemas/` |
 | Sample Data | 1 .json file | `samples/` |
 | Diagrams | 2 .mermaid files | `diagrams/` |
@@ -206,6 +228,7 @@ milvus start                               # Start Milvus database
 - **TESTING_SUMMARY.md** - Quick test results
 - **CHUNK_VIEWER_GUIDE.md** - Complete chunk viewer tutorial
 - **VIEW_CHUNKS_SUMMARY.md** - Chunk viewer cheatsheet
+- **milvus_analyzer_guide.md** - Production collection analyzer (NEW!)
 - **langsmith_quickstart.md** - LangSmith setup in 5 minutes (NEW!)
 - **langsmith_setup.md** - Complete LangSmith guide (NEW!)
 - **INDEX.md** - This file
@@ -227,9 +250,9 @@ milvus start                               # Start Milvus database
 ---
 
 ## Last Updated
-- LangSmith observability added: 2026-07-13
-- 11 guide documents (+ 2 new LangSmith guides)
+- Milvus analyzer added: 2026-07-13
+- 12 guide documents (+ production-grade analyzer guide)
 - 1 schema definition
 - 1 sample document
 - 2 architecture diagrams
-- Total: 15 documentation files organized into 5 categories
+- Total: 16 documentation files + production analyzer tool
