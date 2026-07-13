@@ -61,18 +61,16 @@ class MilvusRAG:
 
     def _create_collection(self):
         """Create collection schema if it doesn't exist."""
-        # Drop if exists
-        if self.client.has_collection(self.collection_name):
-            self.client.drop_collection(self.collection_name)
-
-        # Create collection with MilvusClient 3.0+ API (simplified)
-        # Using auto_id=True for ID generation, simple schema
-        self.client.create_collection(
-            collection_name=self.collection_name,
-            dimension=384,
-            metric_type="L2",
-            auto_id=True,
-        )
+        # Only create if it doesn't already exist
+        if not self.client.has_collection(self.collection_name):
+            # Create collection with MilvusClient 3.0+ API (simplified)
+            # Using auto_id=True for ID generation, simple schema
+            self.client.create_collection(
+                collection_name=self.collection_name,
+                dimension=384,
+                metric_type="L2",
+                auto_id=True,
+            )
 
     def _generate_mock_embedding(self, text: str) -> List[float]:
         """Generate simple embedding using hash (for mock mode).
@@ -109,15 +107,18 @@ class MilvusRAG:
 
         embedding = self._generate_mock_embedding(content)
 
+        # Merge doc_id into metadata
+        meta = metadata or {}
+        meta["doc_id"] = doc_id
+
         self.client.insert(
             collection_name=self.collection_name,
             data=[
                 {
-                    "id": doc_id,
-                    "embedding": embedding,
+                    "vector": embedding,
                     "content": content,
                     "document_type": doc_type,
-                    "metadata": json.dumps(metadata or {}),
+                    "metadata": json.dumps(meta),
                 }
             ]
         )
