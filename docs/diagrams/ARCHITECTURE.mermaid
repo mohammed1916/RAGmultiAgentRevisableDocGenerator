@@ -2,7 +2,7 @@ graph TB
 
 subgraph Frontend
     UI["Chat Interface"]
-    Files["Generated Files"]
+    Files["Generated .docx Files"]
 end
 
 subgraph Backend
@@ -10,38 +10,64 @@ subgraph Backend
     FileAPI["File API"]
 end
 
-subgraph Orchestrator
-    ChatOrch["ChatOrchestrator"]
-    MultiOrch["Multi-Agent Orchestrator"]
+subgraph Orchestrators
+    ChatOrch["ChatOrchestrator<br/>(LLM-driven chat)"]
+    LangGraphOrch["LangGraphOrchestrator<br/>(Plan → Write → Review<br/>→ Refine → Generate)"]
 end
 
-subgraph Agents
-    Planner
-    Writer
-    Reviewer
+subgraph CurrentAgents
+    Planner["PlannerAgent"]
+    Writer["WriterAgent"]
+    Reviewer["ReviewerAgent"]
 end
 
-subgraph Tools
-    Ollama
-    Milvus
-    Markdown
-    DOCX
+subgraph RAG
+    Embed["Sentence Transformer<br/>all-MiniLM-L6-v2"]
+    Milvus["Milvus Vector DB<br/>L2 Semantic Search"]
+end
+
+subgraph LLM
+    Ollama["Ollama LLM"]
+end
+
+subgraph DocumentGeneration
+    Markdown["Markdown Formatter"]
+    DOCX["DOCX Generator"]
+    Word["Word Document"]
+end
+
+subgraph AvailableComponents["Available (Not Yet Integrated)"]
+    Extractor["Progress Extractor"]
+    Validator["Progress Validator"]
+    StateAwarePlanner["StateAwarePlanner"]
 end
 
 UI --> ChatAPI
 ChatAPI --> ChatOrch
-ChatAPI --> MultiOrch
+ChatAPI --> LangGraphOrch
 
-MultiOrch --> Planner
-MultiOrch --> Writer
-MultiOrch --> Reviewer
+ChatOrch --> Milvus
+ChatOrch --> Ollama
+
+LangGraphOrch --> Planner
+LangGraphOrch --> Writer
+LangGraphOrch --> Reviewer
 
 Planner --> Ollama
+Planner --> Embed
+Embed --> Milvus
+
 Writer --> Ollama
+Writer --> Embed
+Embed --> Milvus
+
 Reviewer --> Ollama
 
-Writer --> Milvus
 Writer --> Markdown
 Markdown --> DOCX
-Files --> FileAPI
-FileAPI --> DOCX
+DOCX --> Word
+
+Word --> FileAPI
+FileAPI --> Files
+
+style AvailableComponents fill:#f9f,stroke:#f0f,opacity:0.3
