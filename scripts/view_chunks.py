@@ -24,7 +24,6 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from server.tools import MilvusRAG
-from server.tools.fixtures import MockData
 
 
 def print_chunk(chunk: dict, verbose: bool = False):
@@ -155,32 +154,6 @@ def search_chunks(rag: MilvusRAG, query: str, top_k: int = 5):
         print(f"   {result.get('content', '')[:200]}...")
 
 
-def load_mock_chunks(rag: MilvusRAG):
-    """Load mock chunks into the RAG system."""
-    print("\n" + "=" * 80)
-    print("[LOADING MOCK CHUNKS]")
-    print("=" * 80)
-
-    jee_chunks = MockData.get_mock_chunks_jee()
-    cbse_chunks = MockData.get_mock_chunks_cbse()
-    python_chunks = MockData.get_mock_chunks_python()
-
-    all_chunks = jee_chunks + cbse_chunks + python_chunks
-
-    for chunk in all_chunks:
-        rag.add_document(
-            doc_id=chunk["chunk_id"],
-            content=chunk["chunk_text"],
-            doc_type=chunk["document_id"],  # Use document_id as type
-            metadata=chunk["metadata"],
-        )
-
-    print(f"\n[OK] Loaded {len(all_chunks)} mock chunks")
-    print("  - JEE Mathematics: 4 chunks")
-    print("  - CBSE Physics: 3 chunks")
-    print("  - Python Programming: 3 chunks")
-
-
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -193,7 +166,6 @@ Examples:
   python view_chunks.py --id jee_001       # Get specific chunk
   python view_chunks.py --search "matrices" # Search chunks
   python view_chunks.py --stats             # Show statistics
-  python view_chunks.py --load-mock        # Load mock data
   python view_chunks.py --all -v           # List all with full content
         """,
     )
@@ -224,11 +196,6 @@ Examples:
         help="Show storage statistics",
     )
     parser.add_argument(
-        "--load-mock",
-        action="store_true",
-        help="Load mock chunks into storage",
-    )
-    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Show full content (not just previews)",
@@ -246,11 +213,7 @@ Examples:
     rag = MilvusRAG()
 
     try:
-        if args.load_mock:
-            load_mock_chunks(rag)
-            view_stats(rag)
-
-        elif args.id:
+        if args.id:
             view_chunk(rag, args.id)
 
         elif args.type:

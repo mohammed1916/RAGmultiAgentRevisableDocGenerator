@@ -193,7 +193,6 @@ python scripts/view_chunks.py --id chunk_001       # View specific chunk
 ### Data Loading
 ```bash
 python load_curriculum.py                   # Load curriculum into Milvus
-python scripts/view_chunks.py --load-mock   # Load sample data
 ```
 
 ### Server

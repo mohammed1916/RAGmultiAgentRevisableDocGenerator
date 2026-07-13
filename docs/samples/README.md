@@ -54,7 +54,6 @@ python load_curriculum.py
 
 **To Load This Sample:**
 ```bash
-python scripts/view_chunks.py --load-mock
 ```
 
 ---

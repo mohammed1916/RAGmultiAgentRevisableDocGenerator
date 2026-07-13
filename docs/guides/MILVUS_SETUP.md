@@ -73,7 +73,6 @@ python .\run_server.py
 Load sample data:
 
 ```bash
-python scripts/view_chunks.py --load-mock
 ```
 
 View all chunks:
@@ -369,7 +368,6 @@ Retrieved Chunks
 
 ```bash
 python .\run_server.py
-python scripts/view_chunks.py --load-mock
 ```
 
 ---

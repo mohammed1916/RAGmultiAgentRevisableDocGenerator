@@ -44,11 +44,6 @@ AVAILABLE COMMANDS
 
    Returns: Complete chunk with metadata and content
 
-6. LOAD MOCK DATA (For testing)
-   $ python scripts/view_chunks.py --load-mock
-
-   Loads 10 sample chunks for testing the viewer
-
 ================================================================================
 CURRENT STATUS
 ================================================================================

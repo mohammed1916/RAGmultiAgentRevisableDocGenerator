@@ -92,18 +92,6 @@ Shows full details of a specific chunk:
 - Metadata
 - Full Content
 
-### 6. Load Mock Chunks
-```bash
-python scripts/view_chunks.py --load-mock
-```
-
-Loads sample chunks for testing:
-- JEE Mathematics: 4 chunks
-- CBSE Physics: 3 chunks
-- Python Programming: 3 chunks
-
-Useful for testing before loading real curriculum data.
-
 ---
 
 ## Common Workflows
@@ -293,7 +281,6 @@ python scripts/view_chunks.py --search "equipotential"
 | `--search QUERY` | Search chunks | `python view_chunks.py --search "field"` |
 | `--type TYPE` | Filter by type | `python view_chunks.py --type jee_physics` |
 | `--id ID` | Get specific chunk | `python view_chunks.py --id chunk_001` |
-| `--load-mock` | Load test data | `python view_chunks.py --load-mock` |
 | `-v` | Show full content | `python view_chunks.py --all -v` |
 | `--top-k N` | Limit search results | `python view_chunks.py --search "law" --top-k 5` |
 
