@@ -90,7 +90,7 @@ class MilvusRAG:
             self.client.create_collection(
                 collection_name=self.collection_name,
                 dimension=384,  # sentence-transformers default
-                metric_type="L2",  # L2 distance for semantic similarity
+                metric_type="COSINE",  # Cosine distance for semantic similarity
                 auto_id=True,
             )
 
@@ -189,7 +189,7 @@ class MilvusRAG:
             collection_name=self.collection_name,
             data=[query_vector],
             limit=top_k,
-            search_params={"metric_type": "L2"},
+            search_params={"metric_type": "COSINE", "params": {"nprobe": 10}},
             filter=filter_expr,
             output_fields=["content", "document_type", "metadata"],
         )
