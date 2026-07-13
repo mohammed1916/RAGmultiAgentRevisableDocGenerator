@@ -12,8 +12,13 @@ Usage:
 import argparse
 import json
 import sys
+import io
 from pathlib import Path
 from tabulate import tabulate
+
+# Fix Windows console encoding issues with UTF-8
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 # Add parent directory to path so we can import server modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,7 +29,7 @@ from server.base.mock_data import MockData
 
 def print_chunk(chunk: dict, verbose: bool = False):
     """Pretty print a single chunk."""
-    print(f"\n📦 Chunk ID: {chunk.get('doc_id')}")
+    print(f"\n[CHUNK] ID: {chunk.get('doc_id')}")
     print(f"   Type: {chunk.get('document_type')}")
     print(f"   Metadata: {json.dumps(chunk.get('metadata', {}), indent=8)}")
     print(f"   Content Preview:")
@@ -48,27 +53,27 @@ def print_chunks_table(chunks: list):
         table_data.append([
             chunk.get("doc_id"),
             chunk.get("document_type"),
-            content_preview + "...",
+            content_preview + ("..." if len(content_preview) >= 60 else ""),
             chunk.get("metadata", {}).get("topic", "N/A"),
         ])
 
     headers = ["Chunk ID", "Type", "Content Preview", "Topic"]
-    print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    print("\n" + tabulate(table_data, headers=headers, tablefmt="simple"))
 
 
 def view_all(rag: MilvusRAG, verbose: bool = False):
     """View all stored chunks."""
     print("\n" + "=" * 80)
-    print("📚 ALL STORED CHUNKS")
+    print("[ALL STORED CHUNKS]")
     print("=" * 80)
 
     chunks = rag.list_all_documents()
 
     if not chunks:
-        print("❌ No chunks stored")
+        print("[ERROR] No chunks stored")
         return
 
-    print(f"\n✓ Found {len(chunks)} chunks\n")
+    print(f"\n[OK] Found {len(chunks)} chunks\n")
 
     if verbose:
         for chunk in chunks:
@@ -80,16 +85,16 @@ def view_all(rag: MilvusRAG, verbose: bool = False):
 def view_by_type(rag: MilvusRAG, doc_type: str, verbose: bool = False):
     """View chunks by document type."""
     print("\n" + "=" * 80)
-    print(f"📚 CHUNKS BY TYPE: {doc_type}")
+    print(f"[CHUNKS BY TYPE: {doc_type}]")
     print("=" * 80)
 
     chunks = rag.list_by_type(doc_type)
 
     if not chunks:
-        print(f"❌ No chunks found for type: {doc_type}")
+        print(f"[ERROR] No chunks found for type: {doc_type}")
         return
 
-    print(f"\n✓ Found {len(chunks)} chunks\n")
+    print(f"\n[OK] Found {len(chunks)} chunks\n")
 
     if verbose:
         for chunk in chunks:
@@ -101,13 +106,13 @@ def view_by_type(rag: MilvusRAG, doc_type: str, verbose: bool = False):
 def view_chunk(rag: MilvusRAG, chunk_id: str):
     """View a specific chunk."""
     print("\n" + "=" * 80)
-    print(f"📦 CHUNK DETAILS: {chunk_id}")
+    print(f"[CHUNK DETAILS: {chunk_id}]")
     print("=" * 80)
 
     chunk = rag.get_document(chunk_id)
 
     if not chunk:
-        print(f"❌ Chunk not found: {chunk_id}")
+        print(f"[ERROR] Chunk not found: {chunk_id}")
         return
 
     print_chunk(chunk, verbose=True)
@@ -116,14 +121,14 @@ def view_chunk(rag: MilvusRAG, chunk_id: str):
 def view_stats(rag: MilvusRAG):
     """View storage statistics."""
     print("\n" + "=" * 80)
-    print("📊 STORAGE STATISTICS")
+    print("[STORAGE STATISTICS]")
     print("=" * 80)
 
     stats = rag.get_stats()
 
     print(f"\nMode: {stats.get('mode', 'unknown').upper()}")
     print(f"Total Chunks: {stats.get('total_documents', 0)}")
-    print(f"Indexed: {'✓' if stats.get('indexed') else '✗'}")
+    print(f"Indexed: {'[OK]' if stats.get('indexed') else '[NO]'}")
 
     if "collection_name" in stats:
         print(f"Collection: {stats['collection_name']}")
@@ -132,16 +137,16 @@ def view_stats(rag: MilvusRAG):
 def search_chunks(rag: MilvusRAG, query: str, top_k: int = 5):
     """Search chunks by query."""
     print("\n" + "=" * 80)
-    print(f"🔍 SEARCH RESULTS: '{query}'")
+    print(f"[SEARCH RESULTS: '{query}']")
     print("=" * 80)
 
     results = rag.search(query, top_k=top_k)
 
     if not results:
-        print(f"❌ No chunks match query: {query}")
+        print(f"[ERROR] No chunks match query: {query}")
         return
 
-    print(f"\n✓ Found {len(results)} matching chunks\n")
+    print(f"\n[OK] Found {len(results)} matching chunks\n")
     print_chunks_table(results)
 
     print("\nDetailed Results:")
@@ -153,7 +158,7 @@ def search_chunks(rag: MilvusRAG, query: str, top_k: int = 5):
 def load_mock_chunks(rag: MilvusRAG):
     """Load mock chunks into the RAG system."""
     print("\n" + "=" * 80)
-    print("📥 LOADING MOCK CHUNKS")
+    print("[LOADING MOCK CHUNKS]")
     print("=" * 80)
 
     jee_chunks = MockData.get_mock_chunks_jee()
@@ -170,7 +175,7 @@ def load_mock_chunks(rag: MilvusRAG):
             metadata=chunk["metadata"],
         )
 
-    print(f"\n✓ Loaded {len(all_chunks)} mock chunks")
+    print(f"\n[OK] Loaded {len(all_chunks)} mock chunks")
     print("  - JEE Mathematics: 4 chunks")
     print("  - CBSE Physics: 3 chunks")
     print("  - Python Programming: 3 chunks")

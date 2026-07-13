@@ -45,7 +45,7 @@ async def plan_node(state: DocumentGenerationState) -> DocumentGenerationState:
 
     Node that calls planner agent to create execution plan from request.
     """
-    logger.info("📋 PLAN NODE: Starting document planning")
+    logger.info("[PLAN] Starting document planning")
     orchestrator = Orchestrator()
 
     try:
@@ -55,7 +55,7 @@ async def plan_node(state: DocumentGenerationState) -> DocumentGenerationState:
         )
         plan = orchestrator.planner.plan(doc_request.request)
 
-        logger.info(f"✓ Plan created: {plan.document_type} with {len(plan.outline)} sections")
+        logger.info(f"[OK] Plan created: {plan.document_type} with {len(plan.outline)} sections")
 
         return {
             "execution_plan": plan,
@@ -63,7 +63,7 @@ async def plan_node(state: DocumentGenerationState) -> DocumentGenerationState:
             "messages": [AIMessage(content=f"Created {plan.document_type} plan")],
         }
     except Exception as e:
-        logger.error(f"✗ Planning failed: {str(e)}")
+        logger.error(f"[ERROR] Planning failed: {str(e)}")
         return {
             "error_message": f"Planning error: {str(e)}",
             "messages": [AIMessage(content=f"Planning error: {str(e)}")],
@@ -75,7 +75,7 @@ async def write_node(state: DocumentGenerationState) -> DocumentGenerationState:
 
     Node that calls writer agent to generate document content based on plan.
     """
-    logger.info("✍️  WRITE NODE: Starting document writing")
+    logger.info("[WRITE] Starting document writing")
 
     if not state.get("execution_plan"):
         error_msg = "No execution plan available"
@@ -90,7 +90,7 @@ async def write_node(state: DocumentGenerationState) -> DocumentGenerationState:
             state["execution_plan"]
         )
 
-        logger.info(f"✓ Written {len(sections)} sections")
+        logger.info(f"[OK] Written {len(sections)} sections")
 
         return {
             "sections": [
@@ -105,7 +105,7 @@ async def write_node(state: DocumentGenerationState) -> DocumentGenerationState:
             "messages": [AIMessage(content=f"Written {len(sections)} document sections")],
         }
     except Exception as e:
-        logger.error(f"✗ Writing failed: {str(e)}")
+        logger.error(f"[ERROR] Writing failed: {str(e)}")
         return {
             "error_message": f"Writing error: {str(e)}",
             "messages": [AIMessage(content=f"Writing error: {str(e)}")],
@@ -117,7 +117,7 @@ async def review_node(state: DocumentGenerationState) -> DocumentGenerationState
 
     Node that calls reviewer agent to evaluate document and provide feedback.
     """
-    logger.info("🔍 REVIEW NODE: Starting document review")
+    logger.info("[REVIEW] Starting document review")
 
     if not state.get("sections"):
         error_msg = "No sections to review"
@@ -161,7 +161,7 @@ async def review_node(state: DocumentGenerationState) -> DocumentGenerationState
                 "messages": [AIMessage(content=f"Review complete: Issues found in {len(feedback.section_feedback)} sections")],
             }
         else:
-            logger.info("✓ Review passed - no issues found")
+            logger.info("[OK] Review passed - no issues found")
             return {
                 "review_feedback": "Document approved",
                 "review_issues": None,
@@ -170,7 +170,7 @@ async def review_node(state: DocumentGenerationState) -> DocumentGenerationState
                 "messages": [AIMessage(content="Review complete: Document approved")],
             }
     except Exception as e:
-        logger.error(f"✗ Review failed: {str(e)}")
+        logger.error(f"[ERROR] Review failed: {str(e)}")
         return {
             "error_message": f"Review error: {str(e)}",
             "messages": [AIMessage(content=f"Review error: {str(e)}")],
@@ -182,7 +182,7 @@ async def refine_node(state: DocumentGenerationState) -> DocumentGenerationState
 
     Node that revises sections based on reviewer feedback.
     """
-    logger.info("🔧 REFINE NODE: Refining document")
+    logger.info("[REFINE] Refining document")
 
     orchestrator = Orchestrator()
 
@@ -209,7 +209,7 @@ async def refine_node(state: DocumentGenerationState) -> DocumentGenerationState
             feedback
         )
 
-        logger.info(f"✓ Refined {len(refined_sections)} sections")
+        logger.info(f"[OK] Refined {len(refined_sections)} sections")
 
         return {
             "sections": [
@@ -223,7 +223,7 @@ async def refine_node(state: DocumentGenerationState) -> DocumentGenerationState
             "messages": [AIMessage(content=f"Refined {len(refined_sections)} sections based on feedback")],
         }
     except Exception as e:
-        logger.error(f"✗ Refinement failed: {str(e)}")
+        logger.error(f"[ERROR] Refinement failed: {str(e)}")
         return {
             "error_message": f"Refinement error: {str(e)}",
             "messages": [AIMessage(content=f"Refinement error: {str(e)}")],
@@ -235,7 +235,7 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
 
     Node that creates output document (DOCX) from approved sections.
     """
-    logger.info("📄 GENERATE NODE: Generating output document")
+    logger.info("[GENERATE] Generating output document")
 
     try:
         import os
@@ -273,11 +273,11 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
                     generator.add_paragraph(content)
 
         # Save document
-        os.makedirs("output", exist_ok=True)
+        os.makedirs("output/documents", exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = os.path.join("output", f"document_{timestamp}.docx")
+        filepath = os.path.join("output/documents", f"document_{timestamp}.docx")
         filename = generator.save(filepath)
-        logger.info(f"✓ Document generated: {filename}")
+        logger.info(f"[OK] Document generated: {filename}")
 
         return {
             "document_filename": filename,
@@ -285,7 +285,7 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
             "messages": [AIMessage(content=f"Document generated: {filename}")],
         }
     except Exception as e:
-        logger.error(f"✗ Generation failed: {str(e)}")
+        logger.error(f"[ERROR] Generation failed: {str(e)}")
         return {
             "error_message": f"Generation error: {str(e)}",
             "messages": [AIMessage(content=f"Generation error: {str(e)}")],
@@ -380,7 +380,7 @@ class LangGraphOrchestrator:
         Returns:
             Dictionary with success status and generation details
         """
-        logger.info(f"🚀 Starting document generation: {request[:100]}...")
+        logger.info(f"[START] Starting document generation: {request[:100]}...")
 
         initial_state: DocumentGenerationState = {
             "request": request,
