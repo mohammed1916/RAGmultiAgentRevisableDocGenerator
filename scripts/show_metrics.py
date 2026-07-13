@@ -7,7 +7,9 @@ Shows BLEU, ROUGE, groundedness, context utilization, and other quality metrics.
 import asyncio
 import sys
 import io
+import json
 from pathlib import Path
+from datetime import datetime
 from docx import Document
 
 # Fix Windows console encoding issues with UTF-8
@@ -40,6 +42,37 @@ def extract_docx_content(filepath: str) -> str:
     except Exception as e:
         logger.warning(f"Could not extract DOCX content: {e}")
         return ""
+
+
+def save_metrics_to_history(metrics_data: dict) -> None:
+    """Append metrics to JSONL history file.
+
+    Args:
+        metrics_data: Metrics dictionary to append
+    """
+    try:
+        metrics_dir = Path(__file__).parent.parent / "output" / "metrics"
+        metrics_dir.mkdir(parents=True, exist_ok=True)
+        history_file = metrics_dir / "metrics_history.jsonl"
+
+        # Add timestamp and single-test marker
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "test_type": "single_test",
+            "prompt": "electrostatics electric field",
+            **metrics_data
+        }
+
+        # Append as new line to JSONL file
+        with open(history_file, "a") as f:
+            f.write(json.dumps(entry, default=str) + "\n")
+
+        print(f"\n[METRICS SAVED]")
+        print(f"  {history_file}")
+
+    except Exception as e:
+        logger.error(f"Failed to save metrics: {e}")
+        print(f"  Warning: Could not save metrics - {e}")
 
 
 async def show_metrics():
@@ -187,6 +220,9 @@ async def show_metrics():
             # Display overall evaluation score
             print(f"\n    [OVERALL] Combined Evaluation Score: {metrics.get('overall_evaluation_score', 0):.4f}")
             print("       (Weighted combination of all metrics)")
+
+            # Save metrics to history
+            save_metrics_to_history(metrics)
 
     # Display execution summary
     print("\n[5] Execution Summary")
