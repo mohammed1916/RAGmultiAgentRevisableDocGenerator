@@ -5,7 +5,7 @@
 ```
 docs/
 ├── INDEX.md (you are here)
-├── guides/          → Main documentation (9 guides)
+├── guides/          → Main documentation (11 guides)
 ├── schemas/         → Schema definitions (schema.json)
 ├── samples/         → Sample data (jee_mathematics.json)
 └── diagrams/        → Architecture diagrams (2 mermaid files)
@@ -16,6 +16,9 @@ docs/
 **New to this project?**
 → Read [guides/GETTING_STARTED.md](guides/GETTING_STARTED.md)
 
+**Want to monitor executions with LangSmith?**
+→ Read [guides/langsmith_quickstart.md](guides/langsmith_quickstart.md) (5 min setup)
+
 **Want to run production tests?**
 → Read [guides/PRODUCTION_TESTING_GUIDE.md](guides/PRODUCTION_TESTING_GUIDE.md)
 
@@ -24,11 +27,23 @@ docs/
 
 ---
 
-## Guides (9 documents)
+## Guides (11 documents)
 
 ### Setup & Configuration
 - **[guides/GETTING_STARTED.md](guides/GETTING_STARTED.md)** - Quick start, installation, first run
 - **[guides/MILVUS_SETUP.md](guides/MILVUS_SETUP.md)** - Milvus database setup and configuration
+
+### Observability & Monitoring
+- **[guides/langsmith_quickstart.md](guides/langsmith_quickstart.md)** - 5-minute LangSmith setup (NEW!)
+  - Get API key, enable tracing, view traces
+  - See execution pipeline in real-time
+  - Compare runs and optimize performance
+  
+- **[guides/langsmith_setup.md](guides/langsmith_setup.md)** - Complete LangSmith guide (NEW!)
+  - Detailed setup instructions
+  - Configuration options and examples
+  - Tracing architecture overview
+  - Best practices and troubleshooting
 
 ### Architecture & Understanding
 - **[guides/EXECUTION_FLOW.md](guides/EXECUTION_FLOW.md)** - Complete system execution flow and pipeline
@@ -121,6 +136,14 @@ Located in: `samples/`
 2. Run: `python setup_milvus.py --start`
 3. Verify: `python scripts/view_chunks.py --stats`
 
+### I want to monitor executions with LangSmith
+1. Quick start (5 min): [guides/langsmith_quickstart.md](guides/langsmith_quickstart.md)
+2. Get API key from https://smith.langchain.com/
+3. Set `LANGSMITH_ENABLED=true` and `LANGSMITH_API_KEY=ls_...`
+4. Run: `python scripts/verify_langsmith.py`
+5. Execute: `python scripts/show_metrics.py`
+6. View traces at: https://smith.langchain.com/
+
 ---
 
 ## Key Commands Reference
@@ -129,6 +152,12 @@ Located in: `samples/`
 ```bash
 python scripts/show_metrics.py              # Single test with metrics
 python scripts/test_rag_quality.py          # Comprehensive quality test (3 prompts)
+```
+
+### Observability & Monitoring
+```bash
+python scripts/verify_langsmith.py          # Check LangSmith configuration (requires API key)
+# View traces at: https://smith.langchain.com/
 ```
 
 ### View & Search Chunks
@@ -157,7 +186,7 @@ milvus start                               # Start Milvus database
 
 | Category | Files | Location |
 |----------|-------|----------|
-| Documentation Guides | 9 .md files | `guides/` |
+| Documentation Guides | 11 .md files | `guides/` |
 | Schema Definitions | 1 .json file | `schemas/` |
 | Sample Data | 1 .json file | `samples/` |
 | Diagrams | 2 .mermaid files | `diagrams/` |
@@ -177,6 +206,8 @@ milvus start                               # Start Milvus database
 - **TESTING_SUMMARY.md** - Quick test results
 - **CHUNK_VIEWER_GUIDE.md** - Complete chunk viewer tutorial
 - **VIEW_CHUNKS_SUMMARY.md** - Chunk viewer cheatsheet
+- **langsmith_quickstart.md** - LangSmith setup in 5 minutes (NEW!)
+- **langsmith_setup.md** - Complete LangSmith guide (NEW!)
 - **INDEX.md** - This file
 
 ### Schemas/
@@ -196,9 +227,9 @@ milvus start                               # Start Milvus database
 ---
 
 ## Last Updated
-- Structure reorganized: 2026-07-13
-- 9 guide documents
+- LangSmith observability added: 2026-07-13
+- 11 guide documents (+ 2 new LangSmith guides)
 - 1 schema definition
 - 1 sample document
 - 2 architecture diagrams
-- Total: 13 documentation files organized into 4 categories
+- Total: 15 documentation files organized into 5 categories
