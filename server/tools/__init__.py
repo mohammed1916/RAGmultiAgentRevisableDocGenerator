@@ -7,6 +7,7 @@ from .rag.milvus_rag import MilvusRAG
 from .generation.docx_generator import DOCXGenerator
 from .generation.markdown_formatter import MarkdownFormatter
 from .generation.document_chunker import DocumentChunker
+from .generation.pdf_chunker import PDFChunker
 
 # LLM tools
 from .llm.ollama_client import OllamaClient
@@ -24,6 +25,7 @@ __all__ = [
     "DOCXGenerator",
     "MarkdownFormatter",
     "DocumentChunker",
+    "PDFChunker",
     # LLM
     "OllamaClient",
     # Utils

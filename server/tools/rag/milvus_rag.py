@@ -8,6 +8,8 @@ import json
 import socket
 from typing import List, Dict, Any, Optional
 
+from ...base.logger import setup_logger
+
 try:
     from pymilvus import MilvusClient
 except ImportError:
@@ -17,6 +19,8 @@ try:
     from sentence_transformers import SentenceTransformer
 except ImportError:
     print("WARNING: sentence-transformers not installed. Install with: pip install sentence-transformers")
+
+logger = setup_logger(__name__)
 
 
 class MilvusRAG:
@@ -93,6 +97,28 @@ class MilvusRAG:
                 metric_type="COSINE",  # Cosine similarity for semantic search
                 auto_id=True,
             )
+
+    def recreate_collection(self):
+        """Drop the collection if it exists and create a fresh one.
+
+        Used when fully replacing the indexed data (e.g. re-ingesting from
+        source). Requires an active Milvus connection (not mock mode).
+        """
+        if self.mock_mode:
+            self.mock_documents = {}
+            return
+
+        if self.client.has_collection(self.collection_name):
+            self.client.drop_collection(self.collection_name)
+            logger.info(f"Dropped existing collection: {self.collection_name}")
+
+        self.client.create_collection(
+            collection_name=self.collection_name,
+            dimension=384,
+            metric_type="COSINE",
+            auto_id=True,
+        )
+        logger.info(f"Created fresh collection: {self.collection_name}")
 
     def _get_embedding(self, text: str) -> List[float]:
         """Generate semantic embedding from text.
@@ -184,12 +210,12 @@ class MilvusRAG:
         if doc_type:
             filter_expr = f'document_type == "{doc_type}"'
 
-        # Semantic search in Milvus
+        # Semantic search in Milvus (COSINE similarity matches all-MiniLM-L6-v2)
         results = self.client.search(
             collection_name=self.collection_name,
             data=[query_vector],
             limit=top_k,
-            search_params={"metric_type": "L2"},
+            search_params={"metric_type": "COSINE"},
             filter=filter_expr,
             output_fields=["content", "document_type", "metadata"],
         )

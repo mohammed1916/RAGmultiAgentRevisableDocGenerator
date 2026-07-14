@@ -7,7 +7,6 @@ Works with existing curriculum_data.json format.
 import json
 import sys
 import io
-import hashlib
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -22,15 +21,6 @@ from server.tools import DocumentChunker, MilvusRAG
 from server.base.logger import setup_logger
 
 logger = setup_logger(__name__)
-
-
-def generate_embedding(text: str) -> List[float]:
-    """Generate embedding from text using hash."""
-    hash_val = int(hashlib.md5(text.encode()).hexdigest(), 16)
-    embedding = []
-    for i in range(384):
-        embedding.append(float((hash_val + i) % 1000) / 1000.0)
-    return embedding
 
 
 def load_curriculum_data(json_file: str = "server/data/curriculum_data.json"):
@@ -124,14 +114,18 @@ def load_curriculum_data(json_file: str = "server/data/curriculum_data.json"):
     try:
         # Batch insert all chunks
         if not rag.mock_mode:
+            # Generate real semantic embeddings (batch encode for speed)
+            contents = [chunk["chunk_text"] for chunk in all_chunks]
+            vectors = rag.embedding_model.encode(contents, convert_to_numpy=True)
+
             # Build batch insert data
             batch_data = []
-            for chunk in all_chunks:
+            for chunk, vector in zip(all_chunks, vectors):
                 meta = chunk["metadata"].copy()
                 meta["doc_id"] = chunk["chunk_id"]
 
                 batch_data.append({
-                    "vector": generate_embedding(chunk["chunk_text"]),
+                    "vector": vector.tolist(),
                     "content": chunk["chunk_text"],
                     "document_type": chunk["document_id"],
                     "metadata": json.dumps(meta),
@@ -171,7 +165,7 @@ def load_curriculum_data(json_file: str = "server/data/curriculum_data.json"):
         rag.close()
 
         print("\n[READY] Ready to use RAG with curriculum data!")
-        print("   Test with: python view_chunks.py --search 'physics'")
+        print("   Test with: python scripts/analyze_milvus.py --query 'physics'")
         return True
 
     except Exception as e:
