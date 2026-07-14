@@ -12,6 +12,7 @@ from ...tools import OllamaClient
 from ...tools import MilvusRAG
 from ...tools import DOCXGenerator
 from ...tools import MetricsCollector
+from ...rag_planning import RetrievalOrchestrator
 from ...base.models import (
     DocumentRequest,
     DocumentResponse,
@@ -34,8 +35,9 @@ class Orchestrator:
         """Initialize the orchestrator."""
         self.ollama_client = OllamaClient()
         self.rag_system = MilvusRAG()  # Initialize RAG for curriculum context
+        self.retrieval_orchestrator = RetrievalOrchestrator()  # Planning-based retrieval
         self.planner = PlannerAgent(self.ollama_client)
-        self.writer = WriterAgent(self.ollama_client, rag_system=self.rag_system)
+        self.writer = WriterAgent(self.ollama_client, retrieval_orchestrator=self.retrieval_orchestrator)
         self.reviewer = ReviewerAgent(self.ollama_client)
         self.docx_generator = DOCXGenerator()
         self.metrics = MetricsCollector()
