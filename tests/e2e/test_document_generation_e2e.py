@@ -6,7 +6,6 @@ Tests the full pipeline:
 Uses real sentence-transformers embeddings and PDF-based Milvus corpus.
 """
 
-import json
 import pytest
 from pathlib import Path
 
@@ -29,7 +28,8 @@ class TestLangGraphE2E:
         """Initialize RAG with new PDF corpus."""
         return MilvusRAG()
 
-    def test_document_generation_physics_query(self, orchestrator):
+    @pytest.mark.asyncio
+    async def test_document_generation_physics_query(self, orchestrator):
         """Test document generation for physics revision guide.
 
         Validates:
@@ -42,7 +42,7 @@ class TestLangGraphE2E:
             metadata={"subject": "Physics", "class": "12"},
         )
 
-        result = orchestrator.generate_document(request.request, request.metadata)
+        result = await orchestrator.generate_document(request.request, request.metadata)
 
         assert result["success"] is True
         assert "document_filename" in result
@@ -52,7 +52,8 @@ class TestLangGraphE2E:
         doc_path = Path(result["document_filename"])
         assert doc_path.exists(), f"Generated document not found at {doc_path}"
 
-    def test_document_generation_chemistry_query(self, orchestrator):
+    @pytest.mark.asyncio
+    async def test_document_generation_chemistry_query(self, orchestrator):
         """Test document generation for chemistry topic summary.
 
         Validates semantic search retrieves chemistry content from PDF corpus.
@@ -62,13 +63,14 @@ class TestLangGraphE2E:
             metadata={"subject": "Chemistry", "class": "12"},
         )
 
-        result = orchestrator.generate_document(request.request, request.metadata)
+        result = await orchestrator.generate_document(request.request, request.metadata)
 
         assert result["success"] is True
         assert result["document_filename"].endswith(".docx")
         assert Path(result["document_filename"]).exists()
 
-    def test_document_generation_biology_query(self, orchestrator):
+    @pytest.mark.asyncio
+    async def test_document_generation_biology_query(self, orchestrator):
         """Test document generation for biology revision.
 
         Validates RAG retrieves from Class 10/12 Science corpus.
@@ -78,7 +80,7 @@ class TestLangGraphE2E:
             metadata={"subject": "Biology", "class": "12"},
         )
 
-        result = orchestrator.generate_document(request.request, request.metadata)
+        result = await orchestrator.generate_document(request.request, request.metadata)
 
         assert result["success"] is True
         assert Path(result["document_filename"]).exists()
@@ -105,11 +107,12 @@ class TestChatFlowE2E:
         response = chat_orchestrator.start_conversation(request)
 
         assert response is not None
-        assert response.conversation is not None
-        assert len(response.conversation) > 0
+        assert response.context is not None
+        assert response.context.conversation is not None
+        assert len(response.context.conversation) > 0
         # Should have user message + assistant response
-        assert any(msg.role == "user" for msg in response.conversation)
-        assert any(msg.role == "assistant" for msg in response.conversation)
+        assert any(msg.role == "user" for msg in response.context.conversation)
+        assert any(msg.role == "assistant" for msg in response.context.conversation)
 
     def test_chat_add_answer(self, chat_orchestrator):
         """Test adding answer to chat.
@@ -121,14 +124,14 @@ class TestChatFlowE2E:
         # Start conversation
         request = "I need to prepare for my CBSE Class 12 Physics board exam"
         response = chat_orchestrator.start_conversation(request)
-        initial_msg_count = len(response.conversation)
+        initial_msg_count = len(response.context.conversation)
 
         # Add answer
         answer = "I want to focus on Electrostatics, Current Electricity and Optics. My exam is in 6 weeks and I can study 2 hours per day"
         response = chat_orchestrator.add_answer(response.context, "user_message", answer)
 
         # Should have more messages now
-        assert len(response.conversation) > initial_msg_count
+        assert len(response.context.conversation) > initial_msg_count
 
 
 class TestRAGWithPDFCorpus:
@@ -203,7 +206,8 @@ class TestDocumentQuality:
         """Initialize orchestrator."""
         return LangGraphOrchestrator()
 
-    def test_generated_docx_has_content(self, orchestrator):
+    @pytest.mark.asyncio
+    async def test_generated_docx_has_content(self, orchestrator):
         """Test that generated DOCX files contain substantive content.
 
         Validates:
@@ -218,7 +222,7 @@ class TestDocumentQuality:
             metadata={"subject": "Physics"},
         )
 
-        result = orchestrator.generate_document(request.request, request.metadata)
+        result = await orchestrator.generate_document(request.request, request.metadata)
         assert result["success"] is True
 
         # Open and inspect DOCX
