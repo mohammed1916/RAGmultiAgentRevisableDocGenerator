@@ -1,0 +1,170 @@
+[
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_001",
+    "content": "INFORMATICS PRACTICES Subject Code - 065 Class XI (2025-26) 1. Prerequisite. None 2. Learning Outcomes At the end of this course, students will be able to: ● Identify the components of computer system. ● Create Python programs using different data types, lists and dictionaries. ● Understand database concepts and Relational Database Management Systems. ● Retrieve and manipulate data in RDBMS using Structured Query Language ● Identify the Emerging trends in the fields of Information Technology. 3. Distribution of Marks and Periods Unit No Unit Name Marks 1 Introduction to computer system 10 2 Introduction to Python 25 3 Database concepts and the Structured Query Language 30 4 Introduction to Emerging Trends 5 Practical 30 Total 100 4. Unit Wise syllabus Unit 1: Introduction to Computer System Introduction to computer and computing: evolution of computing devices, components of a computer system and their interconnections, Input/output devices. Computer Memory: Units of memory, types of memory – primary and secondary, data deletion, its recovery and related security concerns. Software: purpose and types – system and application software, generic and specific purpose software",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 1,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_002",
+    "content": ". Software: purpose and types – system and application software, generic and specific purpose software. Unit 2: Introduction to Python Basics of Python programming, execution modes: - interactive and script mode, the structure of a program, indentation, identifiers, keywords, constants, variables, types of operator, precedence of operators, data types, mutable and immutable data types, statements, expression evaluation, comments, input and output statements, data type conversion, debugging",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 2,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_003",
+    "content": ". Control Statements: if-else, if-elif-else, while loop, for loop Lists: list operations - creating, initializing, traversing and manipulating lists, list methods and built-in functions – len(),list(),append(),insert(), count(),index(),remove(), pop(), reverse(), sort(), min(),max(),sum() Dictionary: concept of key-value pair, creating, initializing, traversing, updating and deleting elements, dictionary methods and built-in functions – dict(), len(), keys(), values(), items(), update(), del(), clear() Introduction to NumPy: Introduction, Creation of NumPy Arrays from List Unit 3: Database concepts and the Structured Query Language Database Concepts: Introduction to database concepts and its need, Database Management System",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 3,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_004",
+    "content": ". Relational data model: Concept of domain, tuple, relation, candidate key, primary key, alternate key Advantages of using Structured Query Language, Data Definition Language, Data Query Language and Data Manipulation Language, Introduction to MySQL, creating a database using MySQL, Data Types Data Definition: CREATE DATABASE, CREATE TABLE, DROP, ALTER Data Query: SELECT, FROM, WHERE with relational operators, BETWEEN, logical operators, IS NULL, IS NOT NULL Data Manipulation: INSERT, DELETE,UPDATE Unit 4: Introduction to the Emerging Trends Artificial Intelligence, Machine Learning, Natural Language Processing, Immersive experience (AR, VR), Robotics, Big data and its characteristics, Internet of Things (IoT), Sensors, Smart cities, Cloud Computing and Cloud Services (SaaS, IaaS, PaaS); Grid Computing, Block chain technology. Practical Marks Distribution S.No. Unit Name Marks 1 Problem solving using Python programming language 11 2 Creating database using MySQL and performing Queries 7 3 Practical file (minimum of 14 python programs, and 14 SQL queries) 7 4 Viva-Voce 5 Total 30 5. Suggested Practical List 5.1 Programming in Python 1. To find average and grade for given marks. 2",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 4,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_005",
+    "content": ". Suggested Practical List 5.1 Programming in Python 1. To find average and grade for given marks. 2. To find sale price of an item with given cost and discount (%). 3. To calculate perimeter/circumference and area of shapes such as triangle, rectangle, square and circle. 4. To calculate Simple and Compound interest. 5. To calculate profit-loss for given Cost and Sell Price. 6. To calculate EMI for Amount, Period and Interest. 7. To calculate tax - GST / Income Tax. 8. To find the largest and smallest numbers in a list. 9. To find the third largest/smallest number in a list. 10. To find the sum of squares of the first 100 natural numbers. 11. To print the first ‘n’ multiples of given number. 12. To count the number of vowels in user entered string. 13. To print the words starting with an alphabet in a user entered string. 14. To print number of occurrences of a given alphabet in each string. 15. Create a dictionary to store names of states and their capitals. 16. Create a dictionary of students to store names and marks obtained in 5 subjects. 17. To print the highest and lowest values in the dictionary. 5.2 Data Management: SQL Commands 1. To create a database 2",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 5,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_006",
+    "content": ". 17. To print the highest and lowest values in the dictionary. 5.2 Data Management: SQL Commands 1. To create a database 2. To create student table with the student id, class, section, gender, name, dob, and marks as attributes where the student id is the primary key. 3. To insert the details of at least 10 students in the above table. 4. To display the entire content of table. 5. To display Rno, Name and Marks of those students who are scoring marks more than 50. 6. To display Rno, Name, DOB of those students who are born between ‘2005- 01-01’ and ‘2005-12-31’. Suggested material NCERT Informatics Practices - Text book for class - XI (ISBN- 978-93-5292-148-5) INFORMATICS PRACTICES Subject Code - 065 Class XII (2025-26) 1. Prerequisite: Informatics Practices – Class XI 2. Learning Outcomes At the end of this course, students will be able to: ● Create Series, Data frames and apply various operations. ● Visualize data using relevant graphs. ● Design SQL queries using aggregate functions. ● Import/Export data between SQL database and Pandas. ● Learn terminology related to networking and internet. ● Identify internet security issues and configure browser settings",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 6,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_007",
+    "content": ". ● Import/Export data between SQL database and Pandas. ● Learn terminology related to networking and internet. ● Identify internet security issues and configure browser settings. ● Understand the impact of technology on society including gender and disability issues 3. Distribution of Marks and Periods Unit No Unit Name Marks 1 Data Handling using Pandas and Data Visualization 25 2 Database Query using SQL 25 3 Introduction to Computer Networks 10 4 Societal Impacts 10 Project - Practical 30 Total 100 4. Unit Wise syllabus Unit 1: Data Handling using Pandas -I Introduction to Python libraries- Pandas, Matplotlib; Data structures in Pandas - Series and Data Frames. Series: Creation of Series from – ndarray, dictionary, scalar value; mathematical operations; Head() and Tail() functions; Selection, Indexing and Slicing. Data Frames: creation- from dictionary of Series, list of dictionaries, Text/CSV files, display; iteration; Operations on rows and columns: add, select, delete, rename; Head and Tail functions; Indexing using Labels, Boolean Indexing; Importing/Exporting Data between CSV files and Data Frames",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 7,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_008",
+    "content": ". Data Visualization Purpose of plotting; drawing and saving following types of plots using Matplotlib – line plot, bar graph, histogram Customizing plots: adding label, title, and legend in plots. Unit 2: Database Query using SQL Revision of database concepts and SQL commands covered in class XI Math functions: POWER (), ROUND (), MOD (). Text functions: UCASE ()/UPPER (), LCASE ()/LOWER (), MID ()/SUBSTRING ()/SUBSTR (), LENGTH (), LEFT (), RIGHT (), INSTR (), LTRIM (), RTRIM (), TRIM (). Date Functions: NOW (), DATE (), MONTH (), MONTHNAME (), YEAR (), DAY (), DAYNAME (). Aggregate Functions: MAX (), MIN (), AVG (), SUM (), COUNT (); using COUNT (*). Querying and manipulating data using Group by, Having, Order by. Working with two tables using equi-join Unit 3: Introduction to Computer Networks Introduction to networks, Types of network: PAN, LAN, MAN, WAN. Network Devices: modem, hub, switch, repeater, router, gateway Network Topologies: Star, Bus, Tree, Mesh. Introduction to Internet, URL, WWW, and its applications- Web, email, Chat, VoIP. Website: Introduction, difference between a website and webpage, static vs dynamic web page, web server and hosting of a website",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 8,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_009",
+    "content": ". Website: Introduction, difference between a website and webpage, static vs dynamic web page, web server and hosting of a website. Web Browsers: Introduction, commonly used browsers, browser settings, add-ons and plug-ins, cookies. Unit 4: Societal Impacts Digital footprint, net and communication etiquettes, data protection, intellectual property rights (IPR), plagiarism, licensing and copyright, free and open source software (FOSS), cybercrime and cyber laws, hacking, phishing, cyber bullying, overview of Indian IT Act. E-waste: hazards and management. Awareness about health concerns related to the usage of technology. Project Work The aim of the class project is to create tangible and useful IT application. The learner may identify a real-world problem by exploring the environment. e.g. Students can visit shops/business places, communities or other organizations in their localities and enquire about the functioning of the organization, and how data are generated, stored, and managed. The learner can take data stored in csv or database file and analyze using Python libraries and generate appropriate charts to visualize",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 9,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_010",
+    "content": ". The learner can take data stored in csv or database file and analyze using Python libraries and generate appropriate charts to visualize. Learners can use Python libraries of their choice to develop software for their school or any other social good. Learners should be sensitized to avoid plagiarism and violation of copyright issues while working on projects. Teachers should take necessary measures for this. Any resources (data, image etc.) used in the project must be suitably referenced. The project can be done individually or in groups of 2 to 3 students. The project should be started by students at least 6 months before the submission deadline. Practical Marks Distribution S. No. Unit Name Marks 1 Programs using Pandas and Matplotlib 8 2 SQL Queries 7 3 Practical file (minimum of 15 programs based on Pandas, 4 based on Matplotlib and 15 SQL queries must be included) 5 4 Project Work (using concepts learned in class XI and XII) 5 5 Viva-Voce 5 TOTAL 30 5. Suggested Practical List 5.1 Data Handling 1. Create a panda’s series from a dictionary of values and a ndarray 2. Given a Series, print all the elements that are above the 75th percentile. 3",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 10,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_011",
+    "content": ". Suggested Practical List 5.1 Data Handling 1. Create a panda’s series from a dictionary of values and a ndarray 2. Given a Series, print all the elements that are above the 75th percentile. 3. Create a Data Frame quarterly sales where each row contains the item category, item name, and expenditure. Group the rows by the category and print the total expenditure per category. 4. Create a data frame for examination result and display row labels, column labels data types of each column and the dimensions 5. Filter out rows based on different criteria such as duplicate rows. 6. Importing and exporting data between pandas and CSV file 5.2 Visualization 1. Given the school result data, analyses the performance of the students on different parameters, e.g subject wise or class wise. 2. For the Data frames created above, analyze, and plot appropriate charts with title and legend. 3. Take data of your interest from an open source (e.g. data.gov.in), aggregate and summarize it. Then plot it using different plotting functions of the Matplotlib library. 5.3 Data Management 1. Create a student table with the student id, name, and marks as attributes where the student id is the primary key. 2",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 11,
+      "total_chunks": 12
+    }
+  },
+  {
+    "id": "12_Informatics_Practices_SrSec_2025-26_chunk_012",
+    "content": ". 5.3 Data Management 1. Create a student table with the student id, name, and marks as attributes where the student id is the primary key. 2. Insert the details of a new student in the above table. 3. Delete the details of a student in the above table. 4. Use the select command to get the details of the students with marks more than 80. 5. Find the min, max, sum, and average of the marks in a student marks table. 6. Find the total number of customers from each country in the table (customer ID, customer Name, country) using group by. 7. Write a SQL query to order the (student ID, marks) table in descending order of the marks.",
+    "document_type": "syllabus",
+    "metadata": {
+      "document": "12_Informatics_Practices_SrSec_2025-26.pdf",
+      "board": "CBSE",
+      "class": "12",
+      "subject": "Informatics Practices",
+      "academic_level": "Senior Secondary",
+      "chunk_index": 12,
+      "total_chunks": 12
+    }
+  }
+]
