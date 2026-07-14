@@ -1,0 +1,72 @@
+# Retrieval Planning - Collection Registry Configuration
+# Defines all available Milvus collections for retrieval planning
+
+collections:
+  - name: cbse_class_10
+    display_name: CBSE Class 10
+    description: |
+      CBSE Class X (10th grade) syllabi covering Mathematics, Science, and Social Science.
+      Covers secondary level topics with standard board exam content.
+    milvus_collection: documents_class_10
+    document_count: 126
+    metadata_fields:
+      subject: string
+      academic_level: string
+      board: string
+
+  - name: cbse_class_12
+    display_name: CBSE Class 12
+    description: |
+      CBSE Class XII (12th grade) syllabi covering Physics, Chemistry, Biology, Mathematics,
+      and other subjects. Comprehensive senior secondary level curriculum.
+    milvus_collection: documents_class_12
+    document_count: 924
+    metadata_fields:
+      subject: string
+      academic_level: string
+      chapter: string
+      board: string
+
+  - name: jee
+    display_name: JEE (Joint Entrance Exam)
+    description: |
+      JEE Main and JEE Advanced syllabi for engineering entrance preparation.
+      Includes advanced physics, chemistry, and mathematics content for competitive exams.
+    document_count: 0
+    metadata_fields:
+      subject: string
+      exam_type: string
+      difficulty: string
+
+  # Placeholder collections (to be populated later)
+  - name: neet
+    display_name: NEET (Medical Entrance Exam)
+    description: |
+      NEET syllabi for medical entrance preparation.
+      Covers biology, chemistry, and physics at competitive exam level.
+    document_count: 0
+    metadata_fields:
+      subject: string
+      difficulty: string
+
+  - name: gate
+    display_name: GATE (Graduate Aptitude Test in Engineering)
+    description: |
+      GATE syllabi for engineering postgraduate entrance.
+      Advanced engineering and science topics.
+    document_count: 0
+    metadata_fields:
+      subject: string
+      engineering_branch: string
+      difficulty: string
+
+  - name: upsc
+    display_name: UPSC IAS (Civil Services)
+    description: |
+      UPSC IAS preparation materials for civil services examination.
+      Comprehensive general knowledge, history, geography, and governance content.
+    document_count: 0
+    metadata_fields:
+      subject: string
+      topic: string
+      difficulty: string

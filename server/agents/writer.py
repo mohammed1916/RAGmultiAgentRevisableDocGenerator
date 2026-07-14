@@ -4,7 +4,7 @@ import json
 from typing import Dict, List, Optional
 
 from ..tools import OllamaClient
-from ..tools import MilvusRAG
+from ..rag_planning import RetrievalOrchestrator
 from ..base.models import DocumentSection, ExecutionPlan
 from ..base.exceptions import WriterException
 from ..base.logger import setup_logger
@@ -13,17 +13,24 @@ logger = setup_logger(__name__)
 
 
 class WriterAgent:
-    """Agent responsible for writing document sections."""
+    """Agent responsible for writing document sections.
 
-    def __init__(self, ollama_client: OllamaClient, rag_system: Optional[MilvusRAG] = None):
+    Uses RetrievalOrchestrator for intelligent retrieval planning and execution.
+    """
+
+    def __init__(
+        self,
+        ollama_client: OllamaClient,
+        retrieval_orchestrator: Optional[RetrievalOrchestrator] = None,
+    ):
         """Initialize the Writer Agent.
 
         Args:
             ollama_client: OllamaClient instance
-            rag_system: Optional MilvusRAG instance for curriculum context
+            retrieval_orchestrator: Optional RetrievalOrchestrator for context retrieval
         """
         self.client = ollama_client
-        self.rag = rag_system or MilvusRAG()  # Initialize default RAG if not provided
+        self.orchestrator = retrieval_orchestrator or RetrievalOrchestrator()
 
     def write_section(
         self,
@@ -273,7 +280,9 @@ Return the section as JSON with:
         return prompt
 
     def _fetch_rag_context(self, request: str, section_title: str, doc_type: str) -> str:
-        """Fetch relevant curriculum context from RAG system.
+        """Fetch relevant curriculum context using retrieval planning.
+
+        Uses RetrievalOrchestrator to intelligently plan and execute retrieval.
 
         Args:
             request: User request
@@ -284,21 +293,31 @@ Return the section as JSON with:
             Formatted RAG context or empty string if no results
         """
         try:
-            # Search for relevant curriculum data
-            search_query = f"{request} {section_title}"
-            results = self.rag.search(search_query, top_k=3)
+            # Use orchestrator to retrieve with intelligent planning
+            retrieval_query = f"{request} {section_title}"
+            result = self.orchestrator.retrieve(retrieval_query)
 
-            if not results:
+            if not result.documents:
+                logger.debug(f"No documents retrieved for: {retrieval_query}")
                 return ""
 
+            # Format retrieved documents
             context = "Retrieved curriculum references:\n"
-            for i, result in enumerate(results, 1):
-                context += f"\n{i}. {result['doc_id']}:\n"
-                context += f"   {result['content'][:300]}...\n"
+            context += f"(from {len(result.source_collections)} collections)\n"
+
+            for i, doc in enumerate(result.documents[:3], 1):  # Top 3 results
+                context += f"\n{i}. [{doc.collection}] {doc.doc_id}:\n"
+                context += f"   {doc.content[:300]}...\n"
+
+            logger.info(
+                f"Retrieved {len(result.documents)} documents for section '{section_title}' "
+                f"in {result.execution_time_ms:.1f}ms"
+            )
 
             return context
+
         except Exception as e:
-            logger.warning(f"RAG context fetch failed: {e}")
+            logger.warning(f"Retrieval context fetch failed: {e}")
             return ""
 
     @staticmethod

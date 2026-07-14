@@ -145,6 +145,30 @@ class TestRAGWithPDFCorpus:
             pytest.skip("Milvus not available for RAG test")
         return rag
 
+    def test_two_collections_exist(self, rag):
+        """Test that both Class 10 and Class 12 collections exist."""
+        assert "10" in rag.collection_names
+        assert "12" in rag.collection_names
+        assert rag.collection_names["10"] == "documents_class_10"
+        assert rag.collection_names["12"] == "documents_class_12"
+
+        # Verify both collections exist in Milvus
+        assert rag.client.has_collection("documents_class_10")
+        assert rag.client.has_collection("documents_class_12")
+
+    def test_collection_stats_per_class(self, rag):
+        """Test that stats show document count per class."""
+        stats = rag.get_stats()
+
+        assert stats["mode"] == "milvus"
+        assert "class_10_documents" in stats
+        assert "class_12_documents" in stats
+        assert stats["total_documents"] > 0
+        # Class 10: 126 chunks, Class 12: 924 chunks
+        assert stats["class_10_documents"] == 126, f"Expected 126 Class 10 docs, got {stats['class_10_documents']}"
+        assert stats["class_12_documents"] == 924, f"Expected 924 Class 12 docs, got {stats['class_12_documents']}"
+        assert stats["total_documents"] == 1050
+
     def test_semantic_search_physics(self, rag):
         """Test semantic search retrieves physics content.
 
@@ -196,6 +220,37 @@ class TestRAGWithPDFCorpus:
             # Check for PDF-derived metadata
             assert "class" in meta or "subject" in meta or "board" in meta, \
                 f"Missing PDF metadata in: {meta}"
+
+    def test_search_class_10_only(self, rag):
+        """Test searching within Class 10 collection only."""
+        # Social Science is Class 10 only
+        results = rag.search("social science history", class_level="10", top_k=5)
+
+        assert len(results) > 0
+        # All results should be from Class 10
+        for result in results:
+            assert result.get("class_level") == "10", \
+                f"Expected class_level='10', got {result.get('class_level')}"
+
+    def test_search_class_12_only(self, rag):
+        """Test searching within Class 12 collection only."""
+        results = rag.search("physics quantum mechanics", class_level="12", top_k=5)
+
+        assert len(results) > 0
+        # All results should be from Class 12
+        for result in results:
+            assert result.get("class_level") == "12", \
+                f"Expected class_level='12', got {result.get('class_level')}"
+
+    def test_search_across_both_collections(self, rag):
+        """Test searching across both Class 10 and Class 12 (default behavior)."""
+        results = rag.search("mathematics algebra", top_k=10)
+
+        assert len(results) > 0
+        # Should have both Class 10 and Class 12 results (or at least one type)
+        class_levels = {r.get("class_level") for r in results}
+        # Since Math exists in both, we should get results from one or both
+        assert class_levels.issubset({"10", "12"})
 
 
 class TestDocumentQuality:

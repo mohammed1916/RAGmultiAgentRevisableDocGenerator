@@ -53,3 +53,15 @@ class ValidationException(DocumentGenerationException):
     """Exception raised for validation errors."""
 
     pass
+
+
+class PlanningException(DocumentGenerationException):
+    """Exception raised by retrieval planner (RAG planning system)."""
+
+    pass
+
+
+class RetrievalException(DocumentGenerationException):
+    """Exception raised during retrieval execution (RAG retrieval system)."""
+
+    pass

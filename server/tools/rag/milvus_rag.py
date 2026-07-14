@@ -207,6 +207,7 @@ class MilvusRAG:
         """Search for relevant documents using semantic similarity.
 
         Searches across one or both collections depending on class_level.
+        Kept for backward compatibility; prefer search_collections() for new code.
 
         Args:
             query: Search query (will be embedded)
@@ -217,17 +218,42 @@ class MilvusRAG:
         Returns:
             List of relevant documents with relevance scores
         """
-        if self.mock_mode:
-            return self._mock_search(query, doc_type, class_level, top_k)
-
-        # Determine which collections to search
-        collections_to_search = {}
+        # Convert class_level to collection names
         if class_level:
             if class_level not in self.collection_names:
                 raise ValueError(f"Invalid class_level: {class_level}. Must be one of {list(self.collection_names.keys())}")
-            collections_to_search = {class_level: self.collection_names[class_level]}
+            collection_list = [self.collection_names[class_level]]
         else:
-            collections_to_search = self.collection_names.copy()
+            collection_list = list(self.collection_names.values())
+
+        return self.search_collections(query, collection_list, doc_type, top_k)
+
+    def search_collections(
+        self,
+        query: str,
+        collection_names: List[str],
+        doc_type: str = None,
+        top_k: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Search for relevant documents across specified collections.
+
+        This is the primary search method for routing-based collection selection.
+        Allows searching arbitrary collections without prior knowledge of structure.
+
+        Args:
+            query: Search query (will be embedded)
+            collection_names: List of collection names to search
+            doc_type: Filter by document type (optional)
+            top_k: Number of top results
+
+        Returns:
+            List of relevant documents with relevance scores from all collections
+        """
+        if self.mock_mode:
+            return self._mock_search(query, doc_type, None, top_k)
+
+        if not collection_names:
+            raise ValueError("No collections specified for search")
 
         # Generate semantic embedding for query
         query_vector = self._get_embedding(query)
@@ -237,9 +263,9 @@ class MilvusRAG:
         if doc_type:
             filter_expr = f'document_type == "{doc_type}"'
 
-        # Semantic search across all target collections
+        # Semantic search across specified collections
         all_results = []
-        for level, collection_name in collections_to_search.items():
+        for collection_name in collection_names:
             try:
                 results = self.client.search(
                     collection_name=collection_name,
@@ -260,7 +286,7 @@ class MilvusRAG:
                                 "content": hit.get("content"),
                                 "document_type": hit.get("document_type"),
                                 "metadata": meta,
-                                "class_level": level,
+                                "collection": collection_name,
                                 "relevance_score": float(hit.get("distance", 0)),
                             }
                         )
