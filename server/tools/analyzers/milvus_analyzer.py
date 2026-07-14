@@ -124,13 +124,15 @@ class MetadataAnalyzer:
 class EmbeddingAnalyzer:
     """Analyzes embedding quality and statistics."""
 
-    def __init__(self, chunks: List[Dict[str, Any]]):
+    def __init__(self, chunks: List[Dict[str, Any]], embedding_model=None):
         """Initialize with list of chunks.
 
         Args:
             chunks: List of chunk dictionaries with 'vector' or 'embedding' field
+            embedding_model: Optional SentenceTransformer model for actual token counting
         """
         self.chunks = chunks
+        self.embedding_model = embedding_model
         self.vectors = []
         for chunk in chunks:
             vec = chunk.get("vector") or chunk.get("embedding")
@@ -143,47 +145,89 @@ class EmbeddingAnalyzer:
         Returns:
             Dictionary with embedding metrics
         """
+        # Vector-based metrics (only if vectors are available).
+        # Note: Milvus query() does not return the vector field, so this
+        # section is typically empty when analyzing a live collection.
         if not self.vectors:
-            return {
+            result = {
                 "total_embeddings": 0,
                 "missing_embeddings": len(self.chunks),
                 "coverage": 0.0,
+                "vectors_available": False,
+            }
+        else:
+            vectors = np.array(self.vectors)
+
+            # Calculate statistics
+            norms = np.linalg.norm(vectors, axis=1)
+            avg_norm = float(np.mean(norms))
+            std_norm = float(np.std(norms)) if len(norms) > 1 else 0.0
+
+            # Find nearest neighbors (expensive for large sets, sample if needed)
+            avg_nearest_neighbor = 0.0
+            if len(vectors) > 1:
+                # Sample for performance if > 1000 vectors
+                sample_size = min(100, len(vectors))
+                sample_indices = np.random.choice(len(vectors), sample_size, replace=False)
+
+                distances = []
+                for i in sample_indices:
+                    # Compute distance to all others
+                    dists = np.linalg.norm(vectors - vectors[i], axis=1)
+                    # Second smallest (smallest is self)
+                    dists_sorted = np.sort(dists)
+                    if len(dists_sorted) > 1:
+                        distances.append(float(dists_sorted[1]))
+
+                avg_nearest_neighbor = float(np.mean(distances)) if distances else 0.0
+
+            result = {
+                "total_embeddings": len(self.vectors),
+                "missing_embeddings": len(self.chunks) - len(self.vectors),
+                "coverage": len(self.vectors) / len(self.chunks) if self.chunks else 0.0,
+                "embedding_dimension": len(self.vectors[0]) if self.vectors else 0,
+                "avg_norm": avg_norm,
+                "stdev_norm": std_norm,
+                "avg_nearest_neighbor_distance": avg_nearest_neighbor,
+                "vectors_available": True,
             }
 
-        vectors = np.array(self.vectors)
+        # Get actual token counts if model provided.
+        # This works from chunk content, so it runs even without vectors.
+        if self.embedding_model:
+            token_stats = self._get_actual_token_stats()
+            result.update(token_stats)
 
-        # Calculate statistics
-        norms = np.linalg.norm(vectors, axis=1)
-        avg_norm = float(np.mean(norms))
-        std_norm = float(np.std(norms)) if len(norms) > 1 else 0.0
+        return result
 
-        # Find nearest neighbors (expensive for large sets, sample if needed)
-        avg_nearest_neighbor = 0.0
-        if len(vectors) > 1:
-            # Sample for performance if > 1000 vectors
-            sample_size = min(100, len(vectors))
-            sample_indices = np.random.choice(len(vectors), sample_size, replace=False)
+    def _get_actual_token_stats(self) -> Dict[str, Any]:
+        """Get actual token counts using the embedding model's tokenizer.
 
-            distances = []
-            for i in sample_indices:
-                # Compute distance to all others
-                dists = np.linalg.norm(vectors - vectors[i], axis=1)
-                # Second smallest (smallest is self)
-                dists_sorted = np.sort(dists)
-                if len(dists_sorted) > 1:
-                    distances.append(float(dists_sorted[1]))
+        Returns:
+            Dictionary with token statistics
+        """
+        try:
+            token_counts = []
+            for chunk in self.chunks:
+                content = chunk.get("content", "")
+                if content:
+                    # Tokenize using the model's tokenizer
+                    tokens = self.embedding_model.tokenize([content])
+                    token_count = len(tokens["input_ids"][0])
+                    token_counts.append(token_count)
 
-            avg_nearest_neighbor = float(np.mean(distances)) if distances else 0.0
+            if token_counts:
+                return {
+                    "total_tokens_actual": sum(token_counts),
+                    "avg_tokens_actual": float(statistics.mean(token_counts)),
+                    "min_tokens_actual": min(token_counts),
+                    "max_tokens_actual": max(token_counts),
+                    "token_counting_method": "sentence-transformers tokenizer",
+                }
+        except Exception as e:
+            logger.warning(f"Could not compute actual token counts: {e}")
 
-        return {
-            "total_embeddings": len(self.vectors),
-            "missing_embeddings": len(self.chunks) - len(self.vectors),
-            "coverage": len(self.vectors) / len(self.chunks) if self.chunks else 0.0,
-            "embedding_dimension": len(self.vectors[0]) if self.vectors else 0,
-            "avg_norm": avg_norm,
-            "stdev_norm": std_norm,
-            "avg_nearest_neighbor_distance": avg_nearest_neighbor,
-        }
+        return {}
 
 
 class RetrievalAnalyzer:
@@ -288,7 +332,18 @@ class ReportGenerator:
 
         # Embedding analysis
         if include_embeddings:
-            embedding_analyzer = EmbeddingAnalyzer(self.chunks)
+            # Try to load embedding model for actual token counting
+            embedding_model = None
+            try:
+                if hasattr(self.rag, 'embedding_model') and self.rag.embedding_model:
+                    embedding_model = self.rag.embedding_model
+                elif hasattr(self.rag, 'embedding_model_name') and not self.rag.mock_mode:
+                    from sentence_transformers import SentenceTransformer
+                    embedding_model = SentenceTransformer(self.rag.embedding_model_name)
+            except Exception as e:
+                logger.warning(f"Could not load embedding model for token counting: {e}")
+
+            embedding_analyzer = EmbeddingAnalyzer(self.chunks, embedding_model=embedding_model)
             report["embedding_analysis"] = embedding_analyzer.analyze()
 
         # Retrieval analysis
@@ -297,25 +352,43 @@ class ReportGenerator:
             report["retrieval_analysis"] = retrieval_analyzer.test_queries(test_queries)
 
         # Token estimation
-        report["token_estimation"] = self._estimate_tokens(chunk_analyzer.analyze())
+        chunk_stats = chunk_analyzer.analyze()
+        embedding_stats = report.get("embedding_analysis", {})
+        report["token_estimation"] = self._estimate_tokens(chunk_stats, embedding_stats)
 
         return report
 
-    def _estimate_tokens(self, chunk_stats: Dict[str, Any]) -> Dict[str, Any]:
-        """Estimate token counts using rough conversion (1 token ≈ 4 chars).
+    def _estimate_tokens(self, chunk_stats: Dict[str, Any], embedding_stats: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Estimate and/or report token counts.
 
         Args:
             chunk_stats: Chunk statistics dictionary
+            embedding_stats: Optional embedding statistics with actual token counts
 
         Returns:
-            Dictionary with token estimates
+            Dictionary with token estimates and actual counts
         """
-        return {
-            "avg_tokens_per_chunk": int(chunk_stats.get("avg_length", 0) / 4),
-            "min_tokens": int(chunk_stats.get("min_length", 0) / 4),
-            "max_tokens": int(chunk_stats.get("max_length", 0) / 4),
-            "total_estimated_tokens": int(chunk_stats.get("total_chars", 0) / 4),
+        result = {
+            "estimate_method": "4-char approximation (rough)",
+            "avg_tokens_estimate": int(chunk_stats.get("avg_length", 0) / 4),
+            "min_tokens_estimate": int(chunk_stats.get("min_length", 0) / 4),
+            "max_tokens_estimate": int(chunk_stats.get("max_length", 0) / 4),
+            "total_tokens_estimate": int(chunk_stats.get("total_chars", 0) / 4),
         }
+
+        # If actual tokens were computed, add them
+        if embedding_stats:
+            if "total_tokens_actual" in embedding_stats:
+                result.update({
+                    "total_tokens_actual": embedding_stats.get("total_tokens_actual"),
+                    "avg_tokens_actual": embedding_stats.get("avg_tokens_actual"),
+                    "min_tokens_actual": embedding_stats.get("min_tokens_actual"),
+                    "max_tokens_actual": embedding_stats.get("max_tokens_actual"),
+                    "token_counting_method": embedding_stats.get("token_counting_method"),
+                    "estimate_accuracy": f"{(embedding_stats.get('total_tokens_actual', 0) / result['total_tokens_estimate'] * 100 if result['total_tokens_estimate'] > 0 else 0):.1f}%",
+                })
+
+        return result
 
     def print_report(self, report: Dict[str, Any]) -> None:
         """Pretty-print the analysis report.
@@ -346,13 +419,28 @@ class ReportGenerator:
         print(f"  Total Content        : {chunk_stats.get('total_chars', 0)} chars")
 
         # Token estimation
-        print("\nEstimated Tokens (1 token ≈ 4 chars)")
+        print("\nToken Analysis")
         print("-" * 70)
         tokens = report.get("token_estimation", {})
-        print(f"  Average              : {tokens.get('avg_tokens_per_chunk', 0)}")
-        print(f"  Min                  : {tokens.get('min_tokens', 0)}")
-        print(f"  Max                  : {tokens.get('max_tokens', 0)}")
-        print(f"  Total                : {tokens.get('total_estimated_tokens', 0)}")
+
+        # Show estimate method
+        print(f"  Estimate Method      : {tokens.get('estimate_method', 'N/A')}")
+
+        # Estimated tokens
+        print(f"\n  Estimated (4-char):")
+        print(f"    Average            : {tokens.get('avg_tokens_estimate', 0)}")
+        print(f"    Min                : {tokens.get('min_tokens_estimate', 0)}")
+        print(f"    Max                : {tokens.get('max_tokens_estimate', 0)}")
+        print(f"    Total              : {tokens.get('total_tokens_estimate', 0)}")
+
+        # Actual tokens (if available)
+        if "total_tokens_actual" in tokens:
+            print(f"\n  Actual ({tokens.get('token_counting_method', 'tokenizer')}):")
+            print(f"    Average            : {tokens.get('avg_tokens_actual', 0):.1f}")
+            print(f"    Min                : {tokens.get('min_tokens_actual', 0)}")
+            print(f"    Max                : {tokens.get('max_tokens_actual', 0)}")
+            print(f"    Total              : {tokens.get('total_tokens_actual', 0)}")
+            print(f"\n  Accuracy             : {tokens.get('estimate_accuracy', 'N/A')} (actual vs estimate)")
 
         # Quality report
         print("\nQuality Report")
@@ -382,12 +470,16 @@ class ReportGenerator:
             print("\nEmbedding Analysis")
             print("-" * 70)
             embeddings = report["embedding_analysis"]
-            print(f"  Total Embeddings     : {embeddings.get('total_embeddings', 0)}")
-            print(f"  Missing Embeddings   : {embeddings.get('missing_embeddings', 0)}")
-            print(f"  Coverage             : {embeddings.get('coverage', 0):.1%}")
-            print(f"  Dimension            : {embeddings.get('embedding_dimension', 0)}")
-            print(f"  Avg Norm             : {embeddings.get('avg_norm', 0):.3f}")
-            print(f"  Avg NN Distance      : {embeddings.get('avg_nearest_neighbor_distance', 0):.3f}")
+            if embeddings.get("vectors_available"):
+                print(f"  Total Embeddings     : {embeddings.get('total_embeddings', 0)}")
+                print(f"  Missing Embeddings   : {embeddings.get('missing_embeddings', 0)}")
+                print(f"  Coverage             : {embeddings.get('coverage', 0):.1%}")
+                print(f"  Dimension            : {embeddings.get('embedding_dimension', 0)}")
+                print(f"  Avg Norm             : {embeddings.get('avg_norm', 0):.3f}")
+                print(f"  Avg NN Distance      : {embeddings.get('avg_nearest_neighbor_distance', 0):.3f}")
+            else:
+                print("  Vectors not returned by Milvus query() API.")
+                print("  (Vector stats unavailable; token counts shown above are exact.)")
 
         # Retrieval analysis
         if "retrieval_analysis" in report:
