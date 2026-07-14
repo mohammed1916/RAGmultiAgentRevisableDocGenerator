@@ -28,9 +28,10 @@ end
 %% AI Agents
 %% =========================
 subgraph Agents["AI Agent Layer"]
-    Planner["Planner Agent<br/>(Current)"]
-    Writer["Writer Agent"]
-    Reviewer["Reviewer Agent"]
+    Router["Router Agent<br/>(Collection Selection)"]
+    Planner["Planner Agent<br/>(Plan Generation)"]
+    Writer["Writer Agent<br/>(Content Writing<br/>& Refinement)"]
+    Reviewer["Reviewer Agent<br/>(Quality Check)"]
 end
 
 %% =========================
@@ -38,8 +39,13 @@ end
 %% =========================
 subgraph Knowledge["Knowledge Layer (RAG)"]
     Embed["SentenceTransformer<br/>all-MiniLM-L6-v2"]
-    Milvus["Milvus Vector Database"]
-    Context["Retrieved Curriculum Context"]
+    subgraph MilvusCollections["Milvus Vector Database"]
+        Col10["cbse_class_10<br/>(CBSE Class 10)"]
+        Col12["cbse_class_12<br/>(CBSE Class 12)"]
+        ColJEE["jee<br/>(JEE Main & Advanced)"]
+        ColOther["neet, gate, upsc<br/>(Future collections)"]
+    end
+    Context["Retrieved Curriculum Context<br/>(Curriculum-specific docs)"]
 end
 
 %% =========================
@@ -86,22 +92,32 @@ Extractor --> Validator
 Validator --> State
 State --> SAP
 
-%% Planning with state awareness
-SAP --> Embed
-Embed --> Milvus
-Milvus --> Context
-Context --> SAP
+%% Planning with state awareness + document retrieval
+SAP -->|curriculum_type + query| Router
+Router --> Embed
+Embed -->|route by curriculum| Col10
+Embed -->|route by curriculum| Col12
+Embed -->|route by curriculum| ColJEE
+Col10 -->|fetch docs| Context
+Col12 -->|fetch docs| Context
+ColJEE -->|fetch docs| Context
+Context --> Router
 
-SAP --> Writer
+Router -->|context + state| Planner
 
-Writer --> Ollama
+Planner -->|plan| Writer
+
+Writer -->|write sections| Ollama
+Writer -->|refine sections| Ollama
 
 Writer --> Structure
 
 Structure --> Reviewer
 
-Reviewer -->|Approved| Markdown
-Reviewer -->|Revision Needed| Writer
+Reviewer -->|No issues| Markdown
+Reviewer -->|Issues found<br/>Iteration < 2| Writer
+Writer -->|with revision<br/>feedback| Reviewer
+Reviewer -->|Iteration >= 2<br/>or Approved| Markdown
 
 Markdown --> DOCX
 DOCX --> Word
