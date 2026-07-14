@@ -30,13 +30,13 @@ class MilvusRAG:
     - Real embeddings: sentence-transformers (384-dim semantic vectors)
     - Real vector database: Milvus with ANN indexing
     - Genuine semantic search: cosine/L2 similarity on meaningful vectors
+    - Multiple collections: Separate collections for Class 10 and Class 12
     """
 
     def __init__(
         self,
         host: str = "localhost",
         port: int = 19530,
-        collection_name: str = "documents",
         embedding_model: str = "all-MiniLM-L6-v2",
     ):
         """Initialize Milvus RAG with semantic embeddings.
@@ -44,12 +44,14 @@ class MilvusRAG:
         Args:
             host: Milvus server host
             port: Milvus server port
-            collection_name: Collection name for documents
             embedding_model: Sentence-transformers model to use (384-dim)
         """
         self.host = host
         self.port = port
-        self.collection_name = collection_name
+        self.collection_names = {
+            "10": "documents_class_10",
+            "12": "documents_class_12",
+        }
         self.client = None
         self.embedding_model = None
         self.embedding_model_name = embedding_model
@@ -58,7 +60,7 @@ class MilvusRAG:
 
         try:
             self._connect()
-            self._create_collection()
+            self._create_collections()
             # Only load embedding model if Milvus connected successfully
             self._load_embedding_model()
         except Exception as e:
@@ -88,18 +90,20 @@ class MilvusRAG:
 
         self.client = MilvusClient(f"http://{self.host}:{self.port}")
 
-    def _create_collection(self):
-        """Create collection schema if it doesn't exist."""
-        if not self.client.has_collection(self.collection_name):
-            self.client.create_collection(
-                collection_name=self.collection_name,
-                dimension=384,  # sentence-transformers default
-                metric_type="COSINE",  # Cosine similarity for semantic search
-                auto_id=True,
-            )
+    def _create_collections(self):
+        """Create collection schemas if they don't exist."""
+        for class_level, collection_name in self.collection_names.items():
+            if not self.client.has_collection(collection_name):
+                self.client.create_collection(
+                    collection_name=collection_name,
+                    dimension=384,  # sentence-transformers default
+                    metric_type="COSINE",  # Cosine similarity for semantic search
+                    auto_id=True,
+                )
+                logger.info(f"Created collection: {collection_name} (Class {class_level})")
 
-    def recreate_collection(self):
-        """Drop the collection if it exists and create a fresh one.
+    def recreate_collections(self):
+        """Drop both collections if they exist and create fresh ones.
 
         Used when fully replacing the indexed data (e.g. re-ingesting from
         source). Requires an active Milvus connection (not mock mode).
@@ -108,17 +112,18 @@ class MilvusRAG:
             self.mock_documents = {}
             return
 
-        if self.client.has_collection(self.collection_name):
-            self.client.drop_collection(self.collection_name)
-            logger.info(f"Dropped existing collection: {self.collection_name}")
+        for class_level, collection_name in self.collection_names.items():
+            if self.client.has_collection(collection_name):
+                self.client.drop_collection(collection_name)
+                logger.info(f"Dropped existing collection: {collection_name}")
 
-        self.client.create_collection(
-            collection_name=self.collection_name,
-            dimension=384,
-            metric_type="COSINE",
-            auto_id=True,
-        )
-        logger.info(f"Created fresh collection: {self.collection_name}")
+            self.client.create_collection(
+                collection_name=collection_name,
+                dimension=384,
+                metric_type="COSINE",
+                auto_id=True,
+            )
+            logger.info(f"Created fresh collection: {collection_name} (Class {class_level})")
 
     def _get_embedding(self, text: str) -> List[float]:
         """Generate semantic embedding from text.
@@ -145,6 +150,7 @@ class MilvusRAG:
         doc_id: str,
         content: str,
         doc_type: str,
+        class_level: str = "12",
         metadata: Dict[str, Any] = None,
     ):
         """Add document to Milvus with semantic embedding.
@@ -153,14 +159,22 @@ class MilvusRAG:
             doc_id: Document ID (stored in metadata)
             content: Document content to embed
             doc_type: Type of document
+            class_level: Class level ("10" or "12") for collection routing
             metadata: Optional metadata dictionary
         """
+        # Ensure class_level is valid
+        if class_level not in self.collection_names:
+            raise ValueError(f"Invalid class_level: {class_level}. Must be one of {list(self.collection_names.keys())}")
+
+        collection_name = self.collection_names[class_level]
+
         if self.mock_mode:
             self.mock_documents[doc_id] = {
                 "id": doc_id,
                 "content": content,
                 "document_type": doc_type,
                 "metadata": metadata or {},
+                "class_level": class_level,
             }
             return
 
@@ -172,7 +186,7 @@ class MilvusRAG:
         meta["doc_id"] = doc_id
 
         self.client.insert(
-            collection_name=self.collection_name,
+            collection_name=collection_name,
             data=[
                 {
                     "vector": vector,
@@ -187,20 +201,33 @@ class MilvusRAG:
         self,
         query: str,
         doc_type: str = None,
+        class_level: str = None,
         top_k: int = 5,
     ) -> List[Dict[str, Any]]:
         """Search for relevant documents using semantic similarity.
 
+        Searches across one or both collections depending on class_level.
+
         Args:
             query: Search query (will be embedded)
             doc_type: Filter by document type (optional)
+            class_level: Search in specific class ("10", "12", or None for both)
             top_k: Number of top results
 
         Returns:
             List of relevant documents with relevance scores
         """
         if self.mock_mode:
-            return self._mock_search(query, doc_type, top_k)
+            return self._mock_search(query, doc_type, class_level, top_k)
+
+        # Determine which collections to search
+        collections_to_search = {}
+        if class_level:
+            if class_level not in self.collection_names:
+                raise ValueError(f"Invalid class_level: {class_level}. Must be one of {list(self.collection_names.keys())}")
+            collections_to_search = {class_level: self.collection_names[class_level]}
+        else:
+            collections_to_search = self.collection_names.copy()
 
         # Generate semantic embedding for query
         query_vector = self._get_embedding(query)
@@ -210,39 +237,47 @@ class MilvusRAG:
         if doc_type:
             filter_expr = f'document_type == "{doc_type}"'
 
-        # Semantic search in Milvus (COSINE similarity matches all-MiniLM-L6-v2)
-        results = self.client.search(
-            collection_name=self.collection_name,
-            data=[query_vector],
-            limit=top_k,
-            search_params={"metric_type": "COSINE"},
-            filter=filter_expr,
-            output_fields=["content", "document_type", "metadata"],
-        )
-
-        # Format results
-        formatted_results = []
-        if results and len(results) > 0:
-            for hit in results[0]:
-                meta = json.loads(hit.get("metadata", "{}"))
-                formatted_results.append(
-                    {
-                        "doc_id": meta.get("doc_id"),
-                        "content": hit.get("content"),
-                        "document_type": hit.get("document_type"),
-                        "metadata": meta,
-                        "relevance_score": float(hit.get("distance", 0)),
-                    }
+        # Semantic search across all target collections
+        all_results = []
+        for level, collection_name in collections_to_search.items():
+            try:
+                results = self.client.search(
+                    collection_name=collection_name,
+                    data=[query_vector],
+                    limit=top_k,
+                    search_params={"metric_type": "COSINE"},
+                    filter=filter_expr,
+                    output_fields=["content", "document_type", "metadata"],
                 )
 
-        return formatted_results
+                # Format results from this collection
+                if results and len(results) > 0:
+                    for hit in results[0]:
+                        meta = json.loads(hit.get("metadata", "{}"))
+                        all_results.append(
+                            {
+                                "doc_id": meta.get("doc_id"),
+                                "content": hit.get("content"),
+                                "document_type": hit.get("document_type"),
+                                "metadata": meta,
+                                "class_level": level,
+                                "relevance_score": float(hit.get("distance", 0)),
+                            }
+                        )
+            except Exception as e:
+                logger.warning(f"Search failed in {collection_name}: {e}")
 
-    def _mock_search(self, query: str, doc_type: str = None, top_k: int = 5) -> List[Dict[str, Any]]:
+        # Sort by relevance score and return top_k
+        all_results.sort(key=lambda x: x["relevance_score"], reverse=True)
+        return all_results[:top_k]
+
+    def _mock_search(self, query: str, doc_type: str = None, class_level: str = None, top_k: int = 5) -> List[Dict[str, Any]]:
         """Mock search (keyword matching only).
 
         Args:
             query: Search query
             doc_type: Filter by document type (optional)
+            class_level: Filter by class level (optional)
             top_k: Number of results
 
         Returns:
@@ -256,6 +291,10 @@ class MilvusRAG:
             if doc_type and doc["document_type"] != doc_type:
                 continue
 
+            # Apply class_level filter if specified
+            if class_level and doc.get("class_level") != class_level:
+                continue
+
             content = doc["content"].lower()
             score = sum(1 for term in query_terms if term in content)
 
@@ -266,6 +305,7 @@ class MilvusRAG:
                         "content": doc["content"][:500],
                         "document_type": doc["document_type"],
                         "metadata": doc.get("metadata", {}),
+                        "class_level": doc.get("class_level", "12"),
                         "relevance_score": score / len(query_terms) if query_terms else 0,
                     }
                 )
@@ -313,38 +353,50 @@ class MilvusRAG:
         return None
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get collection statistics.
+        """Get collection statistics for all collections.
 
         Returns:
-            Collection statistics
+            Collection statistics including per-class breakdown
         """
         if self.mock_mode:
+            class_10_docs = sum(1 for doc in self.mock_documents.values() if doc.get("class_level") == "10")
+            class_12_docs = sum(1 for doc in self.mock_documents.values() if doc.get("class_level") == "12")
             return {
                 "mode": "mock",
                 "total_documents": len(self.mock_documents),
+                "class_10_documents": class_10_docs,
+                "class_12_documents": class_12_docs,
                 "indexed": True,
             }
 
-        try:
-            stats = self.client.get_collection_stats(self.collection_name)
-            total_docs = stats.get("row_count", 0)
-        except:
-            total_docs = 0
+        stats_by_class = {}
+        total_docs = 0
+
+        for class_level, collection_name in self.collection_names.items():
+            try:
+                stats = self.client.get_collection_stats(collection_name)
+                doc_count = stats.get("row_count", 0)
+                stats_by_class[f"class_{class_level}_documents"] = doc_count
+                total_docs += doc_count
+            except Exception as e:
+                logger.warning(f"Failed to get stats for {collection_name}: {e}")
+                stats_by_class[f"class_{class_level}_documents"] = 0
 
         return {
             "mode": "milvus",
             "total_documents": total_docs,
-            "collection_name": self.collection_name,
+            **stats_by_class,
+            "collections": self.collection_names,
             "indexed": True,
             "embedding_model": "all-MiniLM-L6-v2",
             "embedding_dimension": 384,
         }
 
     def list_all_documents(self) -> List[Dict[str, Any]]:
-        """List all stored documents.
+        """List all stored documents from all collections.
 
         Returns:
-            List of all documents with their metadata
+            List of all documents with their metadata and class level
         """
         if self.mock_mode:
             result = []
@@ -355,29 +407,36 @@ class MilvusRAG:
                         "content": doc["content"],
                         "document_type": doc["document_type"],
                         "metadata": doc.get("metadata", {}),
+                        "class_level": doc.get("class_level", "12"),
                     }
                 )
             return result
 
-        # Query all documents
-        results = self.client.query(
-            collection_name=self.collection_name,
-            filter="",
-            limit=16384,
-            output_fields=["id", "content", "document_type", "metadata", "vector"],
-        )
-
         formatted_results = []
-        for doc in results:
-            meta = json.loads(doc.get("metadata", "{}"))
-            formatted_results.append(
-                {
-                    "doc_id": meta.get("doc_id"),
-                    "content": doc.get("content"),
-                    "document_type": doc.get("document_type"),
-                    "metadata": meta,
-                }
-            )
+
+        # Query all documents from both collections
+        for class_level, collection_name in self.collection_names.items():
+            try:
+                results = self.client.query(
+                    collection_name=collection_name,
+                    filter="",
+                    limit=16384,
+                    output_fields=["id", "content", "document_type", "metadata"],
+                )
+
+                for doc in results:
+                    meta = json.loads(doc.get("metadata", "{}"))
+                    formatted_results.append(
+                        {
+                            "doc_id": meta.get("doc_id"),
+                            "content": doc.get("content"),
+                            "document_type": doc.get("document_type"),
+                            "metadata": meta,
+                            "class_level": class_level,
+                        }
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to list documents from {collection_name}: {e}")
 
         return formatted_results
 

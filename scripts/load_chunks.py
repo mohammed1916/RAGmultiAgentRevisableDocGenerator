@@ -3,16 +3,15 @@
 
 Reads the JSON files produced by ``scripts/extract_pdf_chunks.py`` (Stage 1)
 from ``server/data/chunks``, generates genuine sentence-transformers
-embeddings, and loads them into Milvus.
+embeddings, and loads them into separate Milvus collections for Class 10 and 12.
 
-By default this REPLACES the target collection (drops and recreates it) so the
-PDF-derived chunks become the single source of truth.
+By default this REPLACES the target collections (drops and recreates them) so
+the PDF-derived chunks become the single source of truth.
 
 Usage:
-    python scripts/load_chunks.py                       # replace 'documents'
-    python scripts/load_chunks.py --append              # keep existing data
-    python scripts/load_chunks.py --chunks-dir path     # custom chunk dir
-    python scripts/load_chunks.py --collection name     # custom collection
+    python scripts/load_chunks.py                  # replace all collections
+    python scripts/load_chunks.py --append         # keep existing data
+    python scripts/load_chunks.py --chunks-dir path  # custom chunk dir
 """
 
 import sys
@@ -57,7 +56,7 @@ def load_chunk_files(chunks_dir: Path) -> list:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Load chunk JSON into Milvus with real embeddings",
+        description="Load chunk JSON into Milvus with real embeddings (Class 10 & 12)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -67,22 +66,16 @@ def main() -> int:
         help="Directory containing chunk JSON files (default: server/data/chunks)",
     )
     parser.add_argument(
-        "--collection",
-        type=str,
-        default="documents",
-        help="Target Milvus collection (default: documents)",
-    )
-    parser.add_argument(
         "--append",
         action="store_true",
-        help="Append to the existing collection instead of replacing it",
+        help="Append to the existing collections instead of replacing them",
     )
     args = parser.parse_args()
 
     chunks_dir = Path(args.chunks_dir)
 
     print("\n" + "=" * 70)
-    print("STAGE 2: LOAD CHUNKS INTO MILVUS (real embeddings)")
+    print("STAGE 2: LOAD CHUNKS INTO MILVUS (separate collections per class)")
     print("=" * 70)
 
     if not chunks_dir.exists():
@@ -91,13 +84,14 @@ def main() -> int:
         return 1
 
     # Connect (this loads the sentence-transformers model on success)
-    print(f"\n[1] Connecting to Milvus (collection: {args.collection})...")
-    rag = MilvusRAG(collection_name=args.collection)
+    print(f"\n[1] Connecting to Milvus...")
+    rag = MilvusRAG()
     if rag.mock_mode:
         print("  [ERROR] Milvus is in mock mode - cannot load real embeddings.")
         print("          Start Milvus: docker-compose up -d")
         return 1
-    print("  [OK] Connected, embedding model loaded")
+    print("  [OK] Connected to Milvus")
+    print(f"      Collections: {list(rag.collection_names.values())}")
 
     # Load chunk files
     print(f"\n[2] Reading chunk files from {chunks_dir}...")
@@ -107,55 +101,69 @@ def main() -> int:
         return 1
     print(f"  [OK] {len(all_chunks)} total chunks")
 
+    # Separate chunks by class level
+    class_10_chunks = [c for c in all_chunks if c.get("metadata", {}).get("class") == "10"]
+    class_12_chunks = [c for c in all_chunks if c.get("metadata", {}).get("class") == "12"]
+    print(f"      Class 10: {len(class_10_chunks)} chunks")
+    print(f"      Class 12: {len(class_12_chunks)} chunks")
+
     # Replace or append
     if args.append:
-        print(f"\n[3] Appending to existing collection '{args.collection}'")
+        print(f"\n[3] Appending to existing collections")
     else:
-        print(f"\n[3] Replacing collection '{args.collection}' (drop + recreate)")
-        rag.recreate_collection()
+        print(f"\n[3] Replacing collections (drop + recreate)")
+        rag.recreate_collections()
 
-    # Batch-embed and insert
-    print(f"\n[4] Embedding and inserting ({len(all_chunks)} chunks, batch={BATCH_SIZE})...")
-    inserted = 0
-    for start in range(0, len(all_chunks), BATCH_SIZE):
-        batch = all_chunks[start : start + BATCH_SIZE]
-        contents = [c["content"] for c in batch]
+    # Batch-embed and insert by class
+    total_inserted = 0
+    for class_level, chunks in [("10", class_10_chunks), ("12", class_12_chunks)]:
+        if not chunks:
+            print(f"\n[4.{class_level}] No chunks for Class {class_level}, skipping...")
+            continue
 
-        # Real semantic embeddings (batch encode for speed)
-        vectors = rag.embedding_model.encode(contents, convert_to_numpy=True)
+        print(f"\n[4.{class_level}] Embedding and inserting Class {class_level} ({len(chunks)} chunks, batch={BATCH_SIZE})...")
+        inserted = 0
 
-        batch_data = []
-        for chunk, vector in zip(batch, vectors):
-            meta = dict(chunk.get("metadata", {}))
-            meta["doc_id"] = chunk["id"]
-            batch_data.append(
-                {
-                    "vector": vector.tolist(),
-                    "content": chunk["content"],
-                    "document_type": chunk.get("document_type", "syllabus"),
-                    "metadata": json.dumps(meta),
-                }
-            )
+        for start in range(0, len(chunks), BATCH_SIZE):
+            batch = chunks[start : start + BATCH_SIZE]
+            contents = [c["content"] for c in batch]
 
-        result = rag.client.insert(args.collection, batch_data)
-        inserted += result.get("insert_count", len(batch_data))
-        print(f"  {inserted}/{len(all_chunks)} inserted...")
+            # Real semantic embeddings (batch encode for speed)
+            vectors = rag.embedding_model.encode(contents, convert_to_numpy=True)
 
-    # Persist
-    rag.client.flush(args.collection)
-    print("  [OK] Flushed to disk")
+            for chunk, vector in zip(batch, vectors):
+                meta = dict(chunk.get("metadata", {}))
+                doc_id = chunk["id"]
+
+                rag.add_document(
+                    doc_id=doc_id,
+                    content=chunk["content"],
+                    doc_type=chunk.get("document_type", "syllabus"),
+                    class_level=class_level,
+                    metadata=meta,
+                )
+                inserted += 1
+                total_inserted += 1
+
+            print(f"      {inserted}/{len(chunks)} inserted...")
+
+        # Flush this collection
+        collection_name = rag.collection_names[class_level]
+        rag.client.flush(collection_name)
+        print(f"      [OK] Flushed to disk")
 
     # Stats
     stats = rag.get_stats()
     print("\n[5] Storage statistics")
     print("-" * 70)
     print(f"  Mode          : {stats.get('mode', 'unknown').upper()}")
-    print(f"  Collection    : {stats.get('collection_name', args.collection)}")
     print(f"  Total chunks  : {stats.get('total_documents', 0)}")
+    print(f"  Class 10      : {stats.get('class_10_documents', 0)} chunks")
+    print(f"  Class 12      : {stats.get('class_12_documents', 0)} chunks")
     print(f"  Embedding     : {stats.get('embedding_model', 'N/A')} ({stats.get('embedding_dimension', 0)}-dim)")
 
     rag.close()
-    print("\n[DONE] Chunks loaded with real semantic embeddings.")
+    print("\n[DONE] Chunks loaded with real semantic embeddings into separate collections.")
     print("       Inspect: python scripts/analyze_milvus.py --query \"electrostatics\"")
     return 0
 
