@@ -4,7 +4,6 @@
 Modes:
   - retrieval   : Measure Recall@k, Precision@k, MRR, nDCG@k
   - generation  : Measure answer quality (20-query sample)
-  - rebuild-gt  : Reconstruct ground truth from live corpus
   - generate-bm : Generate benchmark from curriculum chunks
 """
 
@@ -43,11 +42,6 @@ def run_generation_eval():
     run_generation_evaluation()
 
 
-def rebuild_ground_truth():
-    """Rebuild ground truth from live corpus."""
-    from rebuild_ground_truth import rebuild_ground_truth as rebuild_gt
-    print("Starting ground truth rebuild...")
-    rebuild_gt()
 
 
 def generate_benchmark():
@@ -67,14 +61,13 @@ def main():
 Examples:
   python -m evaluation.scripts.run_eval --mode retrieval
   python -m evaluation.scripts.run_eval --mode generation
-  python -m evaluation.scripts.run_eval --mode rebuild-gt
   python -m evaluation.scripts.run_eval --mode generate-bm
         """
     )
 
     parser.add_argument(
         "--mode",
-        choices=["retrieval", "generation", "rebuild-gt", "generate-bm"],
+        choices=["retrieval", "generation", "generate-bm"],
         default="retrieval",
         help="Evaluation mode (default: retrieval)"
     )
@@ -96,16 +89,15 @@ Examples:
     modes = {
         "retrieval": run_retrieval_eval,
         "generation": run_generation_eval,
-        "rebuild-gt": rebuild_ground_truth,
         "generate-bm": generate_benchmark,
     }
 
     try:
         modes[args.mode]()
-        print(f"\n✓ {args.mode} evaluation complete")
+        print(f"\n[OK] {args.mode} evaluation complete")
     except Exception as e:
         logger.error(f"Evaluation failed: {e}", exc_info=True)
-        print(f"\n✗ {args.mode} evaluation failed: {e}")
+        print(f"\n[ERROR] {args.mode} evaluation failed: {e}")
         sys.exit(1)
 
 
