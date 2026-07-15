@@ -1086,6 +1086,502 @@ async def download_file(filename: str):
 
 ---
 
+## Query Routing System (Collection Selection)
+
+### Overview
+
+When the system needs to retrieve context, it uses an **LLM-based router** to intelligently select which knowledge collection(s) to search. This ensures only relevant sources are queried, improving accuracy and speed.
+
+```
+User Query
+    ↓
+[Query Router]
+    ├─ Analyze query
+    ├─ Build routing prompt with available collections
+    ├─ Call LLM to determine best collections
+    ├─ Apply selector filtering (confidence, source type, etc.)
+    ↓
+[Selected Collections] → [Milvus RAG Search]
+```
+
+### Available Collections
+
+Collections represent different knowledge sources:
+
+| Collection | Description | Content |
+|-----------|-------------|---------|
+| cbse_class_10 | CBSE Class 10 curriculum | Core academic curriculum for grade 10 |
+| cbse_class_12 | CBSE Class 12 curriculum | Core academic curriculum for grade 12 |
+| jee | JEE exam preparation | Advanced exam-specific content |
+| neet | NEET exam preparation | Medical exam-specific content |
+| general | General educational content | Supplementary knowledge base |
+
+### Routing Decision Process
+
+**Step 1: Build Dynamic Prompt**
+```
+Available Collections:
+- cbse_class_10: CBSE Grade 10 curriculum covering subjects...
+- cbse_class_12: CBSE Grade 12 curriculum covering subjects...
+- jee: JEE Main/Advanced exam material...
+- neet: Medical entrance exam content...
+
+User Query: "Explain photosynthesis for class 10 boards"
+
+Determine which collection(s) to search...
+```
+
+**Step 2: LLM Router Decision**
+
+The LLM analyzes the query and returns:
+```json
+{
+  "selected_collections": ["cbse_class_10"],
+  "reasoning": "User explicitly mentions class 10 boards, so CBSE Class 10 collection is most relevant",
+  "collection_scores": {
+    "cbse_class_10": 0.95,
+    "cbse_class_12": 0.3,
+    "jee": 0.1,
+    "neet": 0.05
+  },
+  "fallback_collections": ["cbse_class_12"]
+}
+```
+
+**Step 3: Selector Filtering**
+
+Applies rules to refine the router's decision:
+- **Confidence threshold**: Only collections above minimum confidence score
+- **Source type filtering**: Include/exclude specific collection types
+- **Max collections limit**: Cap number of collections to search
+- **Fallback logic**: Collections to try if primary returns no results
+
+**Step 4: Execute Search**
+
+Search the selected collections:
+```python
+for collection_name in selected_collections:
+    results = milvus_rag.search(
+        query=user_query,
+        collection=collection_name,
+        top_k=5
+    )
+```
+
+### Routing Examples
+
+**Example 1: Single Collection**
+```
+Query: "What is the structure of mitochondria?"
+→ Router: cbse_class_10 (0.92), cbse_class_12 (0.85)
+→ Selected: cbse_class_12 (more comprehensive)
+→ Search: CBSE Class 12 collection
+```
+
+**Example 2: Multi-Collection**
+```
+Query: "Compare CBSE and JEE approaches to kinematics"
+→ Router: cbse_class_12 (0.89), jee (0.87)
+→ Selected: [cbse_class_12, jee]
+→ Search: Both collections, merge results
+```
+
+**Example 3: Ambiguous Query with Fallback**
+```
+Query: "Explain electricity"
+→ Router: cbse_class_10 (0.45), cbse_class_12 (0.55), general (0.6)
+→ Selected: [general]
+→ Fallback: [cbse_class_12] if general returns no results
+```
+
+### Router Configuration
+
+**Temperature**: 0.3 (low - deterministic routing decisions)
+
+**Max Tokens**: 500 (enough for JSON response)
+
+**Reasoning**: Each decision includes reasoning for debugging/auditing
+
+### Integration with Document Generation
+
+When chat orchestrator needs to augment LLM context:
+
+```
+Chat Context
+    ↓
+[Router] → Determine relevant collections
+    ↓
+[Milvus RAG] → Search selected collections
+    ↓
+[Retrieved Chunks] → Augment LLM prompt
+    ↓
+[Enhanced Response] → Better document generation
+```
+
+### Failure Modes & Handling
+
+**No Collections Match**
+```
+→ Fallback to broadest collection (general)
+→ Log warning with query and router decision
+→ Continue without augmented context
+```
+
+**Low Confidence Scores**
+```
+→ Check if confidence threshold too strict
+→ Apply fallback collections
+→ Or use default collection
+```
+
+**Empty Results from Selected Collection**
+```
+→ Automatically try fallback_collections
+→ Merge results from multiple sources
+→ If still empty, continue without context
+```
+
+---
+
+## Multi-Agent Architecture
+
+### Agent Pipeline Overview
+
+The document generation uses a three-stage multi-agent pipeline:
+
+```
+[Planner Agent] → [Writer Agent] → [Reviewer Agent] → [DOCX Generator]
+    Plan              Write            Review & Iterate       Output
+```
+
+### Phase 1: Planner Agent
+
+**Role**: Analyzes request and creates execution plan
+
+**Input**: Natural language document request from chat context
+
+**Process**:
+```
+1. Parse document type from request
+2. Extract key requirements (scope, audience, tone)
+3. Generate list of tasks with dependencies
+4. Create document outline with sections
+5. Document assumptions and constraints
+```
+
+**Output**: ExecutionPlan with:
+- document_type: Type of document (e.g., "Todo List", "Technical Specification")
+- assumptions: Dict of extracted requirements
+- tasks: List with id, description, dependencies
+- outline: Ordered list of section titles
+
+**Example**:
+```json
+{
+  "document_type": "Todo List",
+  "assumptions": {
+    "deadline": "1 week",
+    "priority_focus": "urgent items first"
+  },
+  "tasks": [
+    {"id": 1, "description": "Setup development environment", "dependencies": []},
+    {"id": 2, "description": "Run tests", "dependencies": [1]}
+  ],
+  "outline": ["Priority Items", "Backlog Items"]
+}
+```
+
+### Phase 2: Writer Agent
+
+**Role**: Generates content sections based on plan
+
+**Input**: DocumentRequest + ExecutionPlan
+
+**Process**:
+```
+For each section in outline:
+  1. Build context (section title, previous sections, dependencies)
+  2. Call LLM to generate section content in markdown
+  3. Validate output format
+  4. Add to sections list
+  5. Use previous sections as context for next section
+```
+
+**Smart Routing** (for efficiency):
+- Todo lists: Skip full writing, use templated table generation
+- Regular documents: Full LLM-powered section generation
+- Long documents: Section-by-section writing with context window management
+
+**Output**: List of DocumentSection objects:
+```python
+DocumentSection(
+  title="Section Name",
+  content="Markdown formatted content...",
+  heading_level=1
+)
+```
+
+### Phase 3: Reviewer Agent (Iterative Refinement)
+
+**Role**: Quality assurance with iterative fixes
+
+**Input**: ExecutionPlan + DocumentSections
+
+**Process**:
+```
+For iteration = 1 to MAX_ITERATIONS:
+  1. Analyze sections for issues
+  2. Check for: grammar, consistency, structure, relevance
+  3. If no issues found → PASS
+  4. If issues found:
+     - Identify affected sections
+     - Generate fixes via Writer Agent
+     - Replace sections
+     - Go to step 1 (next iteration)
+  5. Track iteration count for metrics
+```
+
+**Review Feedback**:
+```json
+{
+  "has_issues": true,
+  "grammar_issues": ["missing comma in section 2"],
+  "consistency_issues": ["terminology mismatch"],
+  "structure_issues": ["missing header hierarchy"],
+  "tone_issues": [],
+  "section_feedback": [
+    {
+      "section_title": "Introduction",
+      "issues": ["too verbose"],
+      "feedback": "Reduce by 20%"
+    }
+  ]
+}
+```
+
+**Iteration Limit**: Prevents infinite loops (default: 3 iterations max)
+
+**Skipping Logic**: Todo lists skip reviewer (simple format, no iteration needed)
+
+---
+
+## Progress Tracking System
+
+### Client-Side Progress Calculation
+
+**Algorithm**: Progress = 20% per user message (maximum 100%)
+
+```javascript
+function calculateProgress(context) {
+    if (!context || !context.conversation) return 0;
+    
+    // Count user messages only
+    const messageCount = context.conversation
+        .filter(msg => msg.role === 'user')
+        .length;
+    
+    // 20% per message: 1=20%, 2=40%, 3=60%, 4=80%, 5+=100%
+    const progress = Math.min(1.0, messageCount * 0.2);
+    
+    return progress;
+}
+```
+
+**Stages**:
+1. 0% - Initial state (no messages)
+2. 20% - After first user input
+3. 40% - After answering first question
+4. 60% - After answering second question
+5. 80% - After answering third question
+6. 100% - Ready to generate (LLM returns [READY] marker)
+
+### Progress Display
+
+```javascript
+function updateProgress(confidence) {
+    const percent = Math.round(confidence * 100);
+    progressBar.style.width = percent + '%';      // Visual bar
+    progressPercent.textContent = percent + '%';   // Text display
+}
+```
+
+**When Updated**:
+- On chat start response
+- After each answer submission
+- When document generation completes (reaches 100%)
+
+**Visual Element**:
+```html
+<div class="progress-bar">
+  <div id="progressBar" style="width: 0%; height: 100%; background: #28a745;">
+  </div>
+  <span id="progressPercent">0%</span>
+</div>
+```
+
+---
+
+## Document Parsing & Conversion
+
+### Markdown Parser (Text → Document Elements)
+
+**Location**: `server/tools/markdown_formatter.py`
+
+**Purpose**: Convert markdown content to structured document elements
+
+**Supported Elements**:
+
+1. **Headers**:
+   ```markdown
+   ## Section Title → DocumentElement(type='heading', level=2, text='Section Title')
+   ```
+
+2. **Tables**:
+   ```markdown
+   | Col1 | Col2 |
+   |------|------|
+   | A    | B    |
+   → DocumentElement(type='table', rows=[['Col1','Col2'], ['A','B']])
+   ```
+
+3. **Bullet Lists**:
+   ```markdown
+   - Item 1
+   - Item 2
+   → DocumentElement(type='bullet_list', items=['Item 1', 'Item 2'])
+   ```
+
+4. **Numbered Lists**:
+   ```markdown
+   1. First
+   2. Second
+   → DocumentElement(type='numbered_list', items=['First', 'Second'])
+   ```
+
+5. **Paragraphs**:
+   ```markdown
+   Plain text content
+   → DocumentElement(type='paragraph', text='Plain text content')
+   ```
+
+**Parsing Algorithm**:
+```python
+def parse_blocks(text: str) -> List[Dict]:
+    blocks = []
+    lines = text.split('\n')
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check for headers: ## Title
+        if re.match(r'^(#{1,6})\s+(.+)$', line):
+            level = len(match.group(1))
+            blocks.append({'type': 'heading', 'level': level, 'text': text})
+            i += 1
+            
+        # Check for tables: | col | col |
+        elif line.strip().startswith('|'):
+            # Collect all table rows
+            rows = [cells for cell in rows_until_non_table]
+            blocks.append({'type': 'table', 'rows': rows})
+            i = after_table_index
+            
+        # Check for lists: - item or * item
+        elif re.match(r'^[-*]\s+(.+)$', line):
+            items = [item for item in all_list_items]
+            blocks.append({'type': 'bullet_list', 'items': items})
+            i = after_list_index
+            
+        # Default: paragraph
+        else:
+            blocks.append({'type': 'paragraph', 'text': line.strip()})
+            i += 1
+    
+    return blocks
+```
+
+### DOCX Generator (Document Elements → Word File)
+
+**Location**: `server/tools/docx_generator.py`
+
+**Purpose**: Convert structured document to Microsoft Word (.docx) format
+
+**Process**:
+
+```
+DocumentStructure (title + sections)
+         ↓
+    Markdown Parser
+         ↓
+    Document Blocks (heading, table, list, paragraph)
+         ↓
+    DOCX Writer
+         ↓
+    .docx file (binary Word format)
+```
+
+**Element Mapping**:
+
+| Markdown Element | DOCX Element | Properties |
+|------------------|--------------|-----------|
+| # Heading | Paragraph + Style | Heading 1, Bold, Larger font |
+| ## Subheading | Paragraph + Style | Heading 2, Bold, Medium font |
+| Table | Word Table | Grid, borders, cell shading |
+| - Bullet item | Bullet list | Indent, bullet symbol |
+| 1. Numbered item | Numbered list | Auto-numbered |
+| Paragraph | Paragraph | Left-aligned, normal font |
+
+**Code Example**:
+```python
+def from_structure(self, structure: DocumentStructure):
+    """Build DOCX from structured data"""
+    self.create_document(structure.title)
+    
+    for section in structure.sections:
+        # Add section heading
+        self.add_heading(section.title, section.heading_level)
+        
+        # Parse and add markdown content
+        blocks = MarkdownFormatter.parse_blocks(section.content)
+        
+        for block in blocks:
+            if block['type'] == 'heading':
+                self.add_heading(block['text'], block['level'])
+            elif block['type'] == 'table':
+                self.add_table(len(block['rows']), len(block['rows'][0]), block['rows'])
+            elif block['type'] == 'bullet_list':
+                self.add_bullet_list(block['items'])
+            elif block['type'] == 'paragraph':
+                self.add_paragraph(block['text'])
+    
+    return self.doc
+```
+
+**Output**:
+- File: `output/document_YYYYMMDD_HHMMSS.docx`
+- Format: Microsoft Word 2007+ (.docx)
+- Compatibility: Word, Google Docs, LibreOffice, etc.
+
+### Other Parsers in Pipeline
+
+**1. JSON Schema Parser** (Plan extraction)
+- Parses LLM output to JSON schema
+- Validates ExecutionPlan structure
+- Extracts task dependencies
+
+**2. Context Extractor** (Chat context)
+- Parses chat history into context object
+- Extracts learned information (subject, topics, deadline)
+- Builds comprehensive prompt for generation
+
+**3. Error Recovery Parsers**
+- Handles LLM response parsing failures
+- Fallback to structured generation
+- Validates all outputs before using
+
+---
+
 ## Summary: Complete Flow
 
 ```
