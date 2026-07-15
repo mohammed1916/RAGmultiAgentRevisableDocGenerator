@@ -1,0 +1,97 @@
+{
+  "collections": [
+    "documents_class_10",
+    "documents_class_12"
+  ],
+  "timestamp": "2026-07-15 07:04:14.430573",
+  "chunk_statistics": {
+    "total_chunks": 1050,
+    "min_length": 47,
+    "max_length": 1200,
+    "avg_length": 1028.384761904762,
+    "median_length": 1123.0,
+    "stdev_length": 233.8173628229397,
+    "total_chars": 1079804
+  },
+  "quality_report": {
+    "empty_chunks": 0,
+    "duplicate_chunks": 0,
+    "chunks_under_50_chars": 1,
+    "chunks_over_1000_chars": 786
+  },
+  "metadata_analysis": {
+    "document_types": {},
+    "topics": {},
+    "other_fields": {
+      "document": 1050,
+      "board": 1050,
+      "class": 1050,
+      "subject": 1050,
+      "academic_level": 1050,
+      "total_chunks": 1050
+    }
+  },
+  "embedding_analysis": {
+    "total_embeddings": 0,
+    "missing_embeddings": 1050,
+    "coverage": 0.0,
+    "vectors_available": false,
+    "total_tokens_actual": 218924,
+    "avg_tokens_actual": 208.49904761904762,
+    "min_tokens_actual": 15,
+    "max_tokens_actual": 256,
+    "token_counting_method": "sentence-transformers tokenizer"
+  },
+  "retrieval_analysis": {
+    "physics": {
+      "results_found": 5,
+      "top_scores": [
+        0.5022239685058594,
+        0.4804495573043823,
+        0.4613668918609619,
+        0.4139777719974518,
+        0.3986157178878784
+      ],
+      "results": [
+        {
+          "doc_id": "10_Science_Sec_2025-26_chunk_013",
+          "score": 0.5022239685058594,
+          "content_preview": ". Force and Newton\u2019s laws: Force and Motion, Newton\u2019s Laws of Motion, Action and Reaction forces, In"
+        },
+        {
+          "doc_id": "12_Physics_SrSec_2025-26_chunk_002",
+          "score": 0.4804495573043823,
+          "content_preview": ". Besides, the syllabus also attempts to Strengthen the concepts developed at the secondary stage to"
+        },
+        {
+          "doc_id": "10_Science_Sec_2025-26_chunk_003",
+          "score": 0.4613668918609619,
+          "content_preview": "to explain the effect of forces (change in state of motion \u2013 displacement and direction, velocity an"
+        },
+        {
+          "doc_id": "12_Physics_SrSec_2025-26_chunk_001",
+          "score": 0.4139777719974518,
+          "content_preview": "PHYSICS Subject Code \u2013 042 Class XI-XII (2025-26) Senior Secondary stage of school education is a st"
+        },
+        {
+          "doc_id": "10_Science_Sec_2025-26_chunk_001",
+          "score": 0.3986157178878784,
+          "content_preview": "1 SCIENCE Subject Code \u2013 086 Classes IX and X (2025-26) Science Education aims to achieve Scientific"
+        }
+      ]
+    }
+  },
+  "token_estimation": {
+    "estimate_method": "4-char approximation (rough)",
+    "avg_tokens_estimate": 257,
+    "min_tokens_estimate": 11,
+    "max_tokens_estimate": 300,
+    "total_tokens_estimate": 269951,
+    "total_tokens_actual": 218924,
+    "avg_tokens_actual": 208.49904761904762,
+    "min_tokens_actual": 15,
+    "max_tokens_actual": 256,
+    "token_counting_method": "sentence-transformers tokenizer",
+    "estimate_accuracy": "81.1%"
+  }
+}
