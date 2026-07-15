@@ -316,8 +316,11 @@ class ReportGenerator:
         if not self._load_chunks():
             return {"error": "Could not load chunks from Milvus"}
 
+        # Get collection names (MilvusRAG uses collection_names dict)
+        collection_info = list(self.rag.collection_names.values()) if hasattr(self.rag, 'collection_names') else ["unknown"]
+
         report = {
-            "collection": self.rag.collection_name,
+            "collections": collection_info,
             "timestamp": str(__import__("datetime").datetime.now()),
         }
 
@@ -404,7 +407,8 @@ class ReportGenerator:
         print("MILVUS COLLECTION ANALYSIS")
         print("=" * 70)
 
-        print(f"\nCollection: {report.get('collection')}")
+        collections = report.get('collections', [])
+        print(f"\nCollections: {', '.join(collections) if collections else 'unknown'}")
         print(f"Analyzed: {report.get('timestamp')}")
 
         # Chunk statistics
