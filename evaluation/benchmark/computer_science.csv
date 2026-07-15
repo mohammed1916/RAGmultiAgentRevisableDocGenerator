@@ -1,0 +1,6 @@
+query_id,subject,chapter,query_text,ground_truth_answer,query_category,difficulty,expected_chunks
+CS001,Computer Science,Algorithms,What is an algorithm?,A step-by-step procedure for solving a problem or accomplishing a task,Definition,Easy,10_Computer_Science_Sec_2025-26_chunk_001
+CS002,Computer Science,Data Structures,Define an array,A collection of elements of the same type stored in contiguous memory locations accessed by index,Definition,Medium,10_Computer_Science_Sec_2025-26_chunk_005
+CS003,Computer Science,Programming,What is a variable?,A named container that holds a value which can change during program execution,Definition,Easy,10_Computer_Science_Sec_2025-26_chunk_002
+CS004,Computer Science,Logic,What is Boolean algebra?,A system of logic using binary values (true/false or 1/0) with operations like AND OR and NOT,Concept explanation,Hard,10_Computer_Science_Sec_2025-26_chunk_010
+CS005,Computer Science,Database,What is a database?,An organized collection of structured data stored and accessed electronically using a database management system,Definition,Medium,10_Computer_Science_Sec_2025-26_chunk_015
