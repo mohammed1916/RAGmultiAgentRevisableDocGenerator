@@ -2,16 +2,26 @@
 
 ## Overview
 
-This evaluation framework measures retrieval performance on a 100-query benchmark across 7 subject areas, 9 query categories, and 3 difficulty levels. Metrics follow standard information retrieval evaluation practices.
+This evaluation framework measures retrieval performance using **curriculum_generated.csv** benchmark. This benchmark is auto-generated from CBSE curriculum chunks, ensuring ground truth always matches the actual corpus structure.
 
-## Benchmark Composition
+## Benchmark Composition (Verified)
 
-| Dimension            | Distribution                                                                                                          | Purpose                   |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| **Subjects**         | Physics (20), Chemistry (20), Biology (20), Math (20), Social Science (10), English (5), CS (5)                       | Domain coverage           |
-| **Query Categories** | Factual lookup, concept explanation, definition, numerical, comparison, multi-hop, chapter ID, application, ambiguous | Query type diversity      |
-| **Difficulty**       | Easy (30), Medium (40), Hard (30)                                                                                     | Complexity stratification |
-| **Total**            | 100 queries                                                                                                           | Reproducible benchmark    |
+Auto-generated from curriculum chunks. **200 queries** distributed as:
+
+| Dimension            | Actual Distribution                                          | Count |
+| -------------------- | ------------------------------------------------------------ | ----- |
+| **Subjects**         | Mathematics, Science, Social Science                         | 3     |
+| **Query Category**   | curriculum-generated (auto-generated from chunks)            | 1     |
+| **Difficulty Level** | Medium (uniform across all queries)                          | 1     |
+| **Total**            | 200 queries                                                  | 200   |
+
+### Distribution by Subject
+
+- **Mathematics**: 93 queries
+- **Science**: 74 queries
+- **Social Science**: 33 queries
+
+**Note**: Previous documentation mentioned 100 queries across 7 subjects with varying difficulty levels. This was based on an older manual benchmark design. The current system uses **curriculum_generated.csv** which is programmatically generated to match corpus content, ensuring 100% ground truth accuracy.
 
 ## Retrieval Metrics
 

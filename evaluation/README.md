@@ -2,34 +2,23 @@
 
 ## Overview
 
-Comprehensive evaluation of the CBSE RAG system using a **100-query benchmark** spanning **7 subjects**, **9 query categories**, and **3 difficulty levels**.
+Evaluation of the CBSE RAG system using **curriculum_generated.csv** benchmark with **200 queries** auto-generated from actual curriculum chunks.
 
-## Benchmark Composition
+## Benchmark Composition (Verified)
+
+Auto-generated benchmark ensuring ground truth matches corpus structure.
 
 ### By Subject
-- **Physics**: 20 queries
-- **Chemistry**: 20 queries
-- **Biology**: 20 queries
-- **Mathematics**: 20 queries
-- **Social Science**: 10 queries
-- **English**: 5 queries
-- **Computer Science**: 5 queries
+- **Mathematics**: 93 queries
+- **Science**: 74 queries
+- **Social Science**: 33 queries
+- **Total**: 200 queries
 
 ### By Query Category
-- Direct factual lookup (25)
-- Concept explanation (20)
-- Definition (10)
-- Numerical/problem solving (10)
-- Comparison (10)
-- Multi-hop (10)
-- Chapter identification (5)
-- Application-based (5)
-- Ambiguous wording (5)
+- **Curriculum-generated**: 200 (all queries auto-generated from chunks)
 
 ### By Difficulty
-- Easy: 30 queries
-- Medium: 40 queries
-- Hard: 30 queries
+- **Medium**: 200 (uniform difficulty across all queries)
 
 ## Retrieval Metrics
 
