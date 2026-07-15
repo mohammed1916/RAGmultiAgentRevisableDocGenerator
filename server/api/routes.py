@@ -351,6 +351,69 @@ async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
         raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
 
 
+@app.post("/chat/refine")
+async def refine_document(req: GenerateFromChatRequest) -> DocumentResponse:
+    """Refine an already-generated document based on user feedback.
+
+    Takes a refinement request and re-generates the document with the updated requirements.
+
+    Args:
+        req: Request with session ID, context, and refinement request
+
+    Returns:
+        Updated DocumentResponse with refined document
+    """
+    logger.info(f"Refining document from chat: {req.session_id}")
+
+    if req.session_id not in chat_sessions:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    try:
+        context = chat_sessions[req.session_id]
+
+        # Add refinement request to conversation context
+        if not hasattr(context, 'refinement_requests'):
+            context.refinement_requests = []
+        context.refinement_requests.append(req.refinement_request)
+
+        # Build refined prompt from chat context + refinement request
+        prompt = chat_orchestrator.get_generation_prompt(context)
+        prompt += f"\n\n[REFINEMENT REQUEST]: {req.refinement_request}"
+
+        # Create document request with context
+        doc_request = DocumentRequest(
+            request=prompt,
+            metadata={
+                "session_id": req.session_id,
+                "chat_history": len(context.conversation),
+                "refinement_request": req.refinement_request,
+                "source": "chat_refinement",
+            }
+        )
+
+        logger.info(f"Calling orchestrator for document refinement...")
+
+        # Generate refined document using multi-agent pipeline
+        response = orchestrator.generate_document(doc_request)
+
+        logger.info(f"Document refined successfully: {response.document_filename}")
+
+        # Update session context
+        chat_sessions[req.session_id] = context
+
+        # Return response with refinement message
+        return DocumentResponse(
+            success=True,
+            document_filename=response.document_filename,
+            request=prompt,
+            message=f"✓ Document refined based on: {req.refinement_request}"
+        )
+
+    except Exception as e:
+        logger.error(f"Document refinement failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Document refinement failed: {str(e)}")
+
+
 @app.post("/todo")
 async def generate_todo_list(request: DocumentRequest) -> DocumentResponse:
     """Generate a prioritized todo list.
@@ -418,6 +481,7 @@ async def root():
             "POST /chat/start": "Start chatbot conversation with clarifying questions",
             "POST /chat/answer": "Answer a clarifying question in chat",
             "POST /chat/generate": "Generate document after chat completion",
+            "POST /chat/refine": "Refine generated document based on user feedback",
             "GET /health": "Health check",
             "GET /metrics": "Aggregated metrics",
             "GET /files": "List all generated documents",

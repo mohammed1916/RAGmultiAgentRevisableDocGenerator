@@ -214,6 +214,139 @@ function showGenerateButton() {
 }
 
 /**
+ * Show refinement option after generation
+ */
+function showRefinementOption() {
+    chatQuestionsArea.innerHTML = `
+        <div style="padding: 20px; background: #f0f7ff; border-radius: 6px; border-left: 4px solid #0066cc;">
+            <p style="margin: 0 0 16px 0; font-weight: 600; color: #0066cc;">✓ Document Generated!</p>
+            <p style="margin: 0 0 16px 0; color: #555; font-size: 14px;">Would you like to refine this document further?</p>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="startRefinement()">Refine Document</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="clearRefinement()">Done</button>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * Start refinement mode - hide chat history and show refinement input
+ */
+function startRefinement() {
+    // Collapse chat history
+    const chatSection = document.querySelector('.chat-section');
+    const collapseBtn = document.createElement('button');
+    collapseBtn.className = 'btn btn-sm';
+    collapseBtn.style.cssText = 'margin-top: 12px; padding: 6px 12px; font-size: 12px; width: 100%;';
+    collapseBtn.textContent = '▼ Show Previous Conversation';
+    collapseBtn.onclick = toggleChatHistory;
+
+    chatMessages.style.display = 'none';
+    progressSection.style.display = 'none';
+
+    if (!document.getElementById('toggleChatBtn')) {
+        collapseBtn.id = 'toggleChatBtn';
+        chatMessages.parentNode.insertBefore(collapseBtn, chatMessages);
+    }
+
+    // Show refinement input
+    chatQuestionsArea.innerHTML = `
+        <div style="padding: 16px; background: #f9f9f9; border-radius: 6px; border: 1px solid #ddd;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #333;">How would you like to refine this document?</label>
+            <div style="display: flex; gap: 8px;">
+                <textarea
+                    id="refinementInput"
+                    placeholder="e.g., 'Add more examples to section 2' or 'Make it more concise'"
+                    rows="3"
+                    style="flex: 1; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px; font-family: inherit;"
+                ></textarea>
+                <button class="btn btn-primary" style="align-self: flex-end; height: fit-content;" onclick="submitRefinement()">Submit</button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('refinementInput').focus();
+}
+
+/**
+ * Toggle chat history visibility
+ */
+function toggleChatHistory() {
+    const toggleBtn = document.getElementById('toggleChatBtn');
+    const isHidden = chatMessages.style.display === 'none';
+
+    if (isHidden) {
+        chatMessages.style.display = 'block';
+        progressSection.style.display = 'block';
+        toggleBtn.textContent = '▲ Hide Previous Conversation';
+    } else {
+        chatMessages.style.display = 'none';
+        progressSection.style.display = 'none';
+        toggleBtn.textContent = '▼ Show Previous Conversation';
+    }
+}
+
+/**
+ * Submit refinement request
+ */
+async function submitRefinement() {
+    const refinement = document.getElementById('refinementInput').value.trim();
+    if (!refinement || isWaiting) return;
+
+    isWaiting = true;
+    try {
+        addChatMessage('user', refinement);
+        showTyping();
+
+        const response = await fetch(`${api.baseURL}/chat/refine`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: currentSessionId,
+                refinement_request: refinement,
+                context: currentChatContext
+            })
+        });
+
+        if (!response.ok) throw new Error('Failed to refine document');
+        const data = await response.json();
+
+        removeTyping();
+        addChatMessage('assistant', data.message || '✓ Document refined and regenerated.');
+
+        currentChatContext = data.context;
+
+        // Show refinement option again or download option
+        if (data.is_ready_to_generate) {
+            showRefinementOption();
+        } else if (data.questions && data.questions.length > 0) {
+            displayChatQuestions(data.questions);
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        removeTyping();
+        addChatMessage('assistant', '[ERROR] ' + error.message);
+    } finally {
+        isWaiting = false;
+    }
+}
+
+/**
+ * Clear refinement mode - restore normal view
+ */
+function clearRefinement() {
+    const toggleBtn = document.getElementById('toggleChatBtn');
+    if (toggleBtn) toggleBtn.remove();
+    chatMessages.style.display = 'block';
+    progressSection.style.display = 'block';
+    chatQuestionsArea.innerHTML = `
+        <div style="text-align: center; padding: 20px; color: #666;">
+            <p>✓ Document ready for download</p>
+        </div>
+    `;
+}
+
+/**
  * Generate document from chat context
  */
 async function generateDocument() {
@@ -236,16 +369,21 @@ async function generateDocument() {
 
         removeTyping();
         addChatMessage('assistant',
-            `✓ Document created!\n\n📄 ${data.document_filename}\n\nQuality: ${data.quality_scores.overall}/5\n\n[Download ready]`
+            `✓ Document created!\n\n📄 ${data.document_filename}\n\nQuality: ${data.quality_scores.overall}/5`
         );
 
-        // Show download button
+        // Show download + refinement options
         chatQuestionsArea.innerHTML = `
-            <a href="${api.baseURL}/download/${data.document_filename}"
-               class="btn btn-success"
-               style="display: block; text-align: center; text-decoration: none; padding: 12px;">
-                ⬇️ Download: ${data.document_filename}
-            </a>
+            <div style="display: flex; gap: 12px;">
+                <a href="${api.baseURL}/download/${data.document_filename}"
+                   class="btn btn-success"
+                   style="flex: 1; text-align: center; text-decoration: none; padding: 12px; display: block;">
+                    ⬇️ Download
+                </a>
+                <button class="btn btn-secondary" style="flex: 1; padding: 12px;" onclick="startRefinement()">
+                    ✏️ Refine
+                </button>
+            </div>
         `;
 
         // Refresh documents list

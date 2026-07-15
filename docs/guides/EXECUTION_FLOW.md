@@ -360,11 +360,11 @@ def _check_if_ready(self, context: ChatContext) -> bool:
 ### Client Side: Send to Document Generation
 
 ```javascript
-// client/app.js - Line 215-256
+// client/app.js - Line 219-260
 async function generateDocument() {
     isWaiting = true;
     try {
-        addChatMessage('assistant', '⏳ Generating your document...');
+        addChatMessage('assistant', ' Generating your document...');
         showTyping();
 
         // Send chat context to backend for document generation
@@ -382,16 +382,21 @@ async function generateDocument() {
 
         removeTyping();
         addChatMessage('assistant',
-            `✓ Document created!\n\n📄 ${data.document_filename}\n\nQuality: ${data.quality_scores.overall}/5\n\n[Download ready]`
+            `✓ Document created!\n\n📄 ${data.document_filename}\n\nQuality: ${data.quality_scores.overall}/5`
         );
 
-        // Show download button
+        // Show download + refine buttons
         chatQuestionsArea.innerHTML = `
-            <a href="${api.baseURL}/download/${data.document_filename}"
-               class="btn btn-success"
-               style="display: block; text-align: center; text-decoration: none; padding: 12px;">
-                ⬇️ Download: ${data.document_filename}
-            </a>
+            <div style="display: flex; gap: 12px;">
+                <a href="${api.baseURL}/download/${data.document_filename}"
+                   class="btn btn-success"
+                   style="flex: 1; text-align: center; text-decoration: none; padding: 12px; display: block;">
+                     Download
+                </a>
+                <button class="btn btn-secondary" style="flex: 1; padding: 12px;" onclick="startRefinement()">
+                     Refine
+                </button>
+            </div>
         `;
 
         // Refresh documents list
@@ -405,7 +410,7 @@ async function generateDocument() {
 ### Server Side: `/chat/generate` endpoint
 
 ```python
-# server/api.py - Line 296-345
+# server/api.py - Line 302-351
 @app.post("/chat/generate")
 async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
     """Generate document from completed chat context using multi-agent orchestration."""
@@ -443,6 +448,172 @@ async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
     except Exception as e:
         logger.error(f"Document generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
+```
+
+---
+
+## 3.5 REFINEMENT: User Refines Generated Document
+
+### Client Side: Refinement Flow
+
+**User clicks "Refine" button after generation:**
+
+```javascript
+// client/app.js - startRefinement()
+function startRefinement() {
+    // Collapse chat history
+    chatMessages.style.display = 'none';
+    progressSection.style.display = 'none';
+
+    // Create toggle button
+    const collapseBtn = document.createElement('button');
+    collapseBtn.id = 'toggleChatBtn';
+    collapseBtn.textContent = ' Show Previous Conversation';
+    collapseBtn.onclick = toggleChatHistory;
+    chatMessages.parentNode.insertBefore(collapseBtn, chatMessages);
+
+    // Show refinement input
+    chatQuestionsArea.innerHTML = `
+        <div style="padding: 16px; background: #f9f9f9; border-radius: 6px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">How would you like to refine this document?</label>
+            <div style="display: flex; gap: 8px;">
+                <textarea
+                    id="refinementInput"
+                    placeholder="e.g., 'Add more examples' or 'Make it shorter'"
+                    rows="3"
+                    style="flex: 1; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px;"
+                ></textarea>
+                <button class="btn btn-primary" onclick="submitRefinement()">Submit</button>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('refinementInput').focus();
+}
+
+// Toggle previous chat visibility
+function toggleChatHistory() {
+    const isHidden = chatMessages.style.display === 'none';
+    if (isHidden) {
+        chatMessages.style.display = 'block';
+        progressSection.style.display = 'block';
+        document.getElementById('toggleChatBtn').textContent = ' Hide Previous Conversation';
+    } else {
+        chatMessages.style.display = 'none';
+        progressSection.style.display = 'none';
+        document.getElementById('toggleChatBtn').textContent = ' Show Previous Conversation';
+    }
+}
+
+// Submit refinement request
+async function submitRefinement() {
+    const refinement = document.getElementById('refinementInput').value.trim();
+    if (!refinement || isWaiting) return;
+
+    isWaiting = true;
+    try {
+        addChatMessage('user', refinement);
+        showTyping();
+
+        // Send refinement to backend
+        const response = await fetch(`${api.baseURL}/chat/refine`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: currentSessionId,
+                refinement_request: refinement,
+                context: currentChatContext
+            })
+        });
+
+        if (!response.ok) throw new Error('Failed to refine document');
+        const data = await response.json();
+
+        removeTyping();
+        addChatMessage('assistant', data.message || '✓ Document refined and regenerated.');
+        currentChatContext = data.context;
+
+        // Show refinement option again or download
+        if (data.is_ready_to_generate) {
+            showRefinementOption();
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        removeTyping();
+        addChatMessage('assistant', '[ERROR] ' + error.message);
+    } finally {
+        isWaiting = false;
+    }
+}
+```
+
+### Server Side: `/chat/refine` endpoint
+
+**NEW endpoint for document refinement:**
+
+```python
+# server/api.py - Line 354-404
+@app.post("/chat/refine")
+async def refine_document(req: GenerateFromChatRequest) -> DocumentResponse:
+    """Refine an already-generated document based on user feedback.
+
+    Takes a refinement request and re-generates the document with the updated requirements.
+
+    Args:
+        req: Request with session ID, context, and refinement request
+
+    Returns:
+        Updated DocumentResponse with refined document
+    """
+    logger.info(f"Refining document from chat: {req.session_id}")
+
+    if req.session_id not in chat_sessions:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    try:
+        context = chat_sessions[req.session_id]
+
+        # Add refinement request to conversation context
+        if not hasattr(context, 'refinement_requests'):
+            context.refinement_requests = []
+        context.refinement_requests.append(req.refinement_request)
+
+        # Build refined prompt from chat context + refinement request
+        prompt = chat_orchestrator.get_generation_prompt(context)
+        prompt += f"\n\n[REFINEMENT REQUEST]: {req.refinement_request}"
+
+        # Create document request with context
+        doc_request = DocumentRequest(
+            request=prompt,
+            metadata={
+                "session_id": req.session_id,
+                "chat_history": len(context.conversation),
+                "refinement_request": req.refinement_request,
+                "source": "chat_refinement",
+            }
+        )
+
+        logger.info(f"Calling orchestrator for document refinement...")
+
+        # Generate refined document using multi-agent pipeline
+        response = orchestrator.generate_document(doc_request)
+
+        logger.info(f"Document refined successfully: {response.document_filename}")
+
+        # Update session context
+        chat_sessions[req.session_id] = context
+
+        # Return response with refinement message
+        return DocumentResponse(
+            success=True,
+            document_filename=response.document_filename,
+            request=prompt,
+            message=f"✓ Document refined based on: {req.refinement_request}"
+        )
+
+    except Exception as e:
+        logger.error(f"Document refinement failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Document refinement failed: {str(e)}")
 ```
 
 ---
@@ -881,7 +1052,7 @@ chatQuestionsArea.innerHTML = `
     <a href="${api.baseURL}/download/${data.document_filename}"
        class="btn btn-success"
        style="display: block; text-align: center; text-decoration: none; padding: 12px;">
-        ⬇️ Download: ${data.document_filename}
+         Download: ${data.document_filename}
     </a>
 `;
 ```
@@ -932,18 +1103,35 @@ async def download_file(filename: str):
 12. PHASE 3 (Reviewer): SKIPPED (todo list doesn't need review)
 13. PHASE 4 (DOCX Gen): Parses markdown → creates DOCX file
 14. SERVER: Saves to output/document_TIMESTAMP.docx
-15. CLIENT: Shows download link
-16. USER: Downloads DOCX file
+15. CLIENT: Shows Download + Refine buttons
+16. CLIENT (OPTIONAL): User clicks Refine → startRefinement()
+17. CLIENT: Hides chat history, shows refinement input
+18. CLIENT: User enters refinement (e.g., "Add more details") → submitRefinement()
+19. API: POST /chat/refine → re-runs orchestrator with refinement added to prompt
+20. SERVER: Regenerates document with refinement applied
+21. CLIENT: User downloads refined document OR refines again
 ```
 
 ---
 
 ## Key Points
 
-✅ **100% LLM-Driven**: All decisions made by LLM, no hardcoded logic
-✅ **Stateful Chat**: Context preserved across requests via session_id
-✅ **Multi-Agent**: Planner → Writer → Reviewer pipeline
-✅ **Smart Routing**: Todo lists skip review phase (faster)
-✅ **Markdown → DOCX**: Block-level parsing converts to proper Word formatting
-✅ **Progress Tracking**: Client updates progress bar (20% per message, 100% when ready)
-✅ **Cloud Ollama**: Uses gpt-oss:120b with 3000s timeout
+ **100% LLM-Driven**: All decisions made by LLM, no hardcoded logic
+ **Stateful Chat**: Context preserved across requests via session_id
+ **Multi-Agent**: Planner → Writer → Reviewer pipeline
+ **Smart Routing**: Todo lists skip review phase (faster)
+ **Markdown → DOCX**: Block-level parsing converts to proper Word formatting
+ **Progress Tracking**: Client updates progress bar (20% per message, 100% when ready)
+ **Refinement Loop**: Users can refine documents iteratively without restarting conversation
+ **Cloud Ollama**: Uses gpt-oss:120b with 3000s timeout
+
+## API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/chat/start` | POST | Start new conversation |
+| `/chat/answer` | POST | Answer clarifying question |
+| `/chat/generate` | POST | Generate document from chat context |
+| `/chat/refine` | POST | Refine existing document with feedback |
+| `/chat/answer` | POST | Answer clarifying question |
+| `/download/{filename}` | GET | Download generated DOCX |
