@@ -3,7 +3,6 @@
 
 Modes:
   - retrieval   : Measure Recall@k, Precision@k, MRR, nDCG@k
-  - generation  : Measure answer quality (20-query sample)
   - generate-bm : Generate benchmark from curriculum chunks
 """
 
@@ -30,23 +29,14 @@ def get_log_file(mode: str) -> Path:
 
 def run_retrieval_eval():
     """Run retrieval evaluation on benchmark."""
-    from run_retrieval_eval import run_retrieval_evaluation
+    from .run_retrieval_eval import run_retrieval_evaluation
     print("Starting retrieval evaluation...")
     run_retrieval_evaluation()
 
 
-def run_generation_eval():
-    """Run generation evaluation on 20-query sample."""
-    from run_generation_eval import run_generation_evaluation
-    print("Starting generation evaluation...")
-    run_generation_evaluation()
-
-
-
-
 def generate_benchmark():
     """Generate benchmark from curriculum chunks."""
-    from generate_curriculum_benchmark import generate_curriculum_benchmark
+    from .generate_curriculum_benchmark import generate_curriculum_benchmark
     print("Starting curriculum benchmark generation...")
     output_csv, queries = generate_curriculum_benchmark()
     print(f"\nGenerated {len(queries)} benchmark queries")
@@ -60,14 +50,13 @@ def main():
         epilog="""
 Examples:
   python -m evaluation.scripts.run_eval --mode retrieval
-  python -m evaluation.scripts.run_eval --mode generation
   python -m evaluation.scripts.run_eval --mode generate-bm
         """
     )
 
     parser.add_argument(
         "--mode",
-        choices=["retrieval", "generation", "generate-bm"],
+        choices=["retrieval", "generate-bm"],
         default="retrieval",
         help="Evaluation mode (default: retrieval)"
     )
@@ -88,7 +77,6 @@ Examples:
     # Route to appropriate function
     modes = {
         "retrieval": run_retrieval_eval,
-        "generation": run_generation_eval,
         "generate-bm": generate_benchmark,
     }
 
