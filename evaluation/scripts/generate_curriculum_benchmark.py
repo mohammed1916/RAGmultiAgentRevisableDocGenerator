@@ -72,8 +72,9 @@ Questions should:
 Format: Return ONLY the questions, one per line, no numbering."""
 
     try:
-        response = llm_client.call(prompt)
-        questions = [q.strip() for q in response.split("\n") if q.strip() and len(q) > 10]
+        result = llm_client.generate(prompt)
+        response_text = result.get("response", "") if isinstance(result, dict) else str(result)
+        questions = [q.strip() for q in response_text.split("\n") if q.strip() and len(q) > 10]
         return questions[:3]
     except Exception as e:
         logger.error(f"Error generating questions for {chunk_id}: {e}")
@@ -187,9 +188,9 @@ def generate_curriculum_benchmark(output_csv: Path = None, max_questions: int = 
         writer.writeheader()
         writer.writerows(benchmark_queries)
 
-    print(f"\n✓ Benchmark saved to: {output_csv}")
-    print(f"✓ Total queries: {question_count}")
-    print(f"✓ Ready to evaluate: python -m evaluation.scripts.run_retrieval_eval")
+    print(f"\n[OK] Benchmark saved to: {output_csv}")
+    print(f"[OK] Total queries: {question_count}")
+    print(f"[OK] Ready to evaluate: python -m evaluation.scripts.run_eval --mode retrieval")
 
     return output_csv, benchmark_queries
 
