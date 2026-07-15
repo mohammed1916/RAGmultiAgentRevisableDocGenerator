@@ -61,75 +61,88 @@ Measured on 20-query sample (for cost efficiency):
 
 ### Retrieval Evaluation
 ```bash
-python evaluation/run_retrieval_eval.py
+cd evaluation
+python -m scripts.run_retrieval_eval
 ```
 
-Output: `evaluation/retrieval_metrics.json`
+Output: `results/retrieval_metrics.json`
 
-### Generation Evaluation
+### Generation Evaluation (Optional)
 ```bash
-python evaluation/run_generation_eval.py
+cd evaluation
+python -m scripts.run_generation_eval
 ```
 
-Output: `evaluation/generation_metrics.json`
+Output: `results/generation_metrics.json`
 
 ### View Results
 ```bash
-cat evaluation/retrieval_metrics.json
-cat evaluation/generation_metrics.json
+cat evaluation/results/retrieval_metrics.json | jq '.metrics_summary'
 ```
 
-## Benchmark Files
+## Directory Structure
 
-- `physics.csv`: 20 physics questions
-- `chemistry.csv`: 20 chemistry questions
-- `biology.csv`: 20 biology questions
-- `mathematics.csv`: 20 math questions
-- `social_science.csv`: 10 social science questions
-- `english.csv`: 5 English questions
-- `computer_science.csv`: 5 computer science questions
+```
+evaluation/
+├── benchmarks/                          # 100 curated questions
+│   ├── physics.csv (20 queries)
+│   ├── chemistry.csv (20 queries)
+│   ├── biology.csv (20 queries)
+│   ├── mathematics.csv (20 queries)
+│   ├── social_science.csv (10 queries)
+│   ├── english.csv (5 queries)
+│   └── computer_science.csv (5 queries)
+│
+├── scripts/                             # Evaluation scripts
+│   ├── run_retrieval_eval.py           # Measures Recall@k, Precision@k, MRR, nDCG@k
+│   ├── run_generation_eval.py          # Answer quality (optional)
+│   └── rebuild_ground_truth.py         # Reconstruct ground truth from corpus
+│
+├── results/                             # Generated outputs
+│   ├── retrieval_metrics.json          # Full metrics + breakdowns
+│   └── generation_metrics.json         # Answer quality metrics (if run)
+│
+├── logs/                                # Execution logs
+│   ├── EVALUATION_LOG_100_QUERIES.txt
+│   ├── EVALUATION_LOG_AFTER_CORRECTION.txt
+│   └── GROUND_TRUTH_REBUILD_LOG.txt
+│
+├── docs/
+│   ├── SETUP.md                        # Technical specification
+│   └── README.md                        # This file
+└── README.md                            # Quick start
+```
 
-Each CSV contains:
-- query_id: Unique identifier
-- subject: Subject area
-- chapter: Specific chapter/topic
-- query_text: The actual question
-- ground_truth_answer: Expected answer
-- query_category: Type of query (9 categories)
-- difficulty: Easy/Medium/Hard
-- expected_chunks: Expected document chunks to retrieve
+## Benchmark Format (CSV)
+
+Each CSV in `benchmarks/` contains:
+- **query_id**: Unique identifier (e.g., P001, C020, SS010)
+- **subject**: Subject area
+- **chapter**: Specific chapter/topic
+- **query_text**: The actual question
+- **ground_truth_answer**: Expected answer text
+- **query_category**: Type of query (9 categories)
+- **difficulty**: Easy/Medium/Hard
+- **expected_chunks**: Comma-separated doc IDs expected in retrieval
 
 ## Interpretation
 
-### Strong Performance Indicators
-- Recall@5 > 80%: Excellent retrieval
-- Recall@3 > 70%: Good retrieval
-- MRR > 0.75: Strong ranking
-- nDCG@5 > 0.80: Good relevance ordering
+### Expected Baseline
+- Recall@5: 90%+ (most queries find relevant material)
+- Precision@5: 80%+ (most retrieved are useful)
+- MRR: 0.85+ (relevant results ranked early)
+- nDCG@5: 0.85+ (ranking quality is high)
+- Hit Rate: 95%+ (very few total failures)
 
-### Weakness Areas
-- Low hit rate on specific categories → Need to improve for that query type
-- Difficulty degradation → Hard questions need better retrieval
+### Performance by Difficulty
+- Easy: 98%+ hit rate
+- Medium: 90-95% hit rate
+- Hard: 80-90% hit rate
 
-## Reproducibility
-
-All benchmarks are versioned and committed to git:
-```
-evaluation/
-├── benchmark/
-│   ├── physics.csv
-│   ├── chemistry.csv
-│   ├── biology.csv
-│   ├── mathematics.csv
-│   ├── social_science.csv
-│   ├── english.csv
-│   └── computer_science.csv
-├── run_retrieval_eval.py
-├── run_generation_eval.py
-├── retrieval_metrics.json (generated)
-├── generation_metrics.json (generated)
-└── README.md
-```
+### Diagnostic Insights
+- **Low category hit rate** → Query type gaps
+- **Hard questions underperforming** → Ranking issues
+- **Subject variance** → Corpus coverage gaps
 
 ## Baseline Results
 

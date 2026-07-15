@@ -23,7 +23,7 @@ def rebuild_ground_truth():
     print("="*70)
 
     rag = MilvusRAG()
-    benchmark_dir = Path(__file__).parent / "benchmark"
+    benchmark_dir = Path(__file__).parent.parent / "benchmarks"
     updated_count = 0
     skipped_count = 0
 

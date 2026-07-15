@@ -41,7 +41,7 @@ def calculate_ndcg(relevance_scores, k=5):
 def load_benchmark_queries():
     """Load all 100 benchmark questions from CSV files."""
     queries = []
-    benchmark_dir = Path(__file__).parent / "benchmark"
+    benchmark_dir = Path(__file__).parent.parent / "benchmarks"
 
     for csv_file in sorted(benchmark_dir.glob("*.csv")):
         with open(csv_file, encoding='utf-8') as f:
@@ -214,7 +214,7 @@ def run_retrieval_evaluation():
     }
 
     # Save results
-    output_file = Path(__file__).parent / "retrieval_metrics.json"
+    output_file = Path(__file__).parent.parent / "results" / "retrieval_metrics.json"
     with open(output_file, "w") as f:
         json.dump(results, f, indent=2)
 
