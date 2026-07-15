@@ -57,25 +57,40 @@ Measured on 20-query sample (for cost efficiency):
 - **Context Relevance**: Coverage of question context in retrieved docs
 - **Quality Score**: Weighted combination of above metrics
 
-## Running the Evaluation
+## Running Evaluations
 
-### Retrieval Evaluation
+### Unified Evaluation Command
+
+All evaluations use the unified entry point:
+
 ```bash
-cd evaluation
-python -m scripts.run_retrieval_eval
+python -m evaluation.scripts.run_eval --mode <MODE>
 ```
 
-Output: `results/retrieval_metrics.json`
+### Retrieval Evaluation (Default)
 
-### Generation Evaluation (Optional)
+Runs 100-query benchmark with full metrics:
+
 ```bash
-cd evaluation
-python -m scripts.run_generation_eval
+python -m evaluation.scripts.run_eval --mode retrieval
 ```
 
-Output: `results/generation_metrics.json`
+Output: `evaluation/results/retrieval_metrics.json`
+
+Runtime: 5-10 minutes
+
+### Benchmark Generation
+
+Generate new benchmark from curriculum chunks:
+
+```bash
+python -m evaluation.scripts.run_eval --mode generate-bm
+```
+
+Output: `evaluation/benchmarks/curriculum_generated.csv`
 
 ### View Results
+
 ```bash
 cat evaluation/results/retrieval_metrics.json | jq '.metrics_summary'
 ```
@@ -84,33 +99,33 @@ cat evaluation/results/retrieval_metrics.json | jq '.metrics_summary'
 
 ```
 evaluation/
-├── benchmarks/                          # 100 curated questions
+├── benchmarks/                          # Evaluation datasets
 │   ├── physics.csv (20 queries)
 │   ├── chemistry.csv (20 queries)
 │   ├── biology.csv (20 queries)
 │   ├── mathematics.csv (20 queries)
 │   ├── social_science.csv (10 queries)
 │   ├── english.csv (5 queries)
-│   └── computer_science.csv (5 queries)
+│   ├── computer_science.csv (5 queries)
+│   └── curriculum_generated.csv (auto-generated)
 │
-├── scripts/                             # Evaluation scripts
-│   ├── run_retrieval_eval.py           # Measures Recall@k, Precision@k, MRR, nDCG@k
-│   ├── run_generation_eval.py          # Answer quality (optional)
-│   └── rebuild_ground_truth.py         # Reconstruct ground truth from corpus
+├── scripts/                             # Evaluation executables
+│   ├── run_eval.py                      # Unified evaluation entry point
+│   ├── run_retrieval_eval.py            # Retrieval evaluation module
+│   ├── generate_curriculum_benchmark.py # Benchmark generation module
+│   └── __init__.py
 │
 ├── results/                             # Generated outputs
-│   ├── retrieval_metrics.json          # Full metrics + breakdowns
-│   └── generation_metrics.json         # Answer quality metrics (if run)
+│   └── retrieval_metrics.json           # Full metrics + breakdowns
 │
-├── logs/                                # Execution logs
-│   ├── EVALUATION_LOG_100_QUERIES.txt
-│   ├── EVALUATION_LOG_AFTER_CORRECTION.txt
-│   └── GROUND_TRUTH_REBUILD_LOG.txt
+├── logs/                                # Execution logs (timestamped)
+│   └── retrieval_YYYY-MM-DD_HH-MM-SS.log
 │
 ├── docs/
 │   ├── SETUP.md                        # Technical specification
-│   └── README.md                        # This file
-└── README.md                            # Quick start
+│   └── README.md                        # (in docs/ directory)
+│
+└── README.md                            # This file
 ```
 
 ## Benchmark Format (CSV)
@@ -144,14 +159,35 @@ Each CSV in `benchmarks/` contains:
 - **Hard questions underperforming** → Ranking issues
 - **Subject variance** → Corpus coverage gaps
 
-## Baseline Results
+## Quick Start Example
 
-To be filled in after first evaluation run.
+1. Verify Milvus is running with curriculum data:
+```bash
+python scripts/view_chunks.py --stats
+```
 
-## Future Improvements
+2. Run retrieval evaluation:
+```bash
+python -m evaluation.scripts.run_eval --mode retrieval
+```
 
-1. **Include RAGAS metrics** for generation quality
-2. **Expand to 500+ queries** for comprehensive evaluation
-3. **A/B test retrieval algorithms** (COSINE vs L2 distance)
-4. **Measure latency and throughput** at scale
-5. **Cross-validation** across different LLM models
+3. Check results:
+```bash
+cat evaluation/results/retrieval_metrics.json | jq '.metrics_summary'
+```
+
+## Integration with RAG System
+
+The evaluation framework integrates with the main RAG system:
+
+1. **Uses live Milvus collection**: Tests actual retrieval performance
+2. **Compatible with mock mode**: Falls back to in-memory chunks if Milvus unavailable
+3. **Verifiable ground truth**: Benchmarks validate against actual corpus
+
+## Future Enhancements
+
+1. Generate metrics for generation quality (RAGAS)
+2. Expand to 500+ queries for comprehensive coverage
+3. A/B test retrieval algorithms (COSINE vs L2 distance)
+4. Measure latency and throughput at scale
+5. Cross-validation across different LLM models

@@ -6,12 +6,12 @@ This evaluation framework measures retrieval performance on a 100-query benchmar
 
 ## Benchmark Composition
 
-| Dimension | Distribution | Purpose |
-|-----------|--------------|---------|
-| **Subjects** | Physics (20), Chemistry (20), Biology (20), Math (20), Social Science (10), English (5), CS (5) | Domain coverage |
-| **Query Categories** | Factual lookup, concept explanation, definition, numerical, comparison, multi-hop, chapter ID, application, ambiguous | Query type diversity |
-| **Difficulty** | Easy (30), Medium (40), Hard (30) | Complexity stratification |
-| **Total** | 100 queries | Reproducible benchmark |
+| Dimension            | Distribution                                                                                                          | Purpose                   |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **Subjects**         | Physics (20), Chemistry (20), Biology (20), Math (20), Social Science (10), English (5), CS (5)                       | Domain coverage           |
+| **Query Categories** | Factual lookup, concept explanation, definition, numerical, comparison, multi-hop, chapter ID, application, ambiguous | Query type diversity      |
+| **Difficulty**       | Easy (30), Medium (40), Hard (30)                                                                                     | Complexity stratification |
+| **Total**            | 100 queries                                                                                                           | Reproducible benchmark    |
 
 ## Retrieval Metrics
 
@@ -48,30 +48,24 @@ Hit Rate = (# queries with hits) / (# total queries)
 ```
 evaluation/
 ├── benchmarks/              # Query datasets
-│   ├── physics.csv
-│   ├── chemistry.csv
-│   ├── biology.csv
-│   ├── mathematics.csv
-│   ├── social_science.csv
-│   ├── english.csv
-│   └── computer_science.csv
+│   └── curriculum_generated.csv (from benchmark generation)
 │
 ├── scripts/                 # Evaluation executables
-│   ├── run_retrieval_eval.py       # Measures Recall@k, Precision@k, MRR, nDCG@k
-│   ├── run_generation_eval.py      # Answer quality evaluation (optional)
-│   └── rebuild_ground_truth.py     # Reconstruct ground truth from live corpus
+│   ├── run_eval.py                    # Unified evaluation runner (primary entry point)
+│   ├── run_retrieval_eval.py          # Retrieval evaluation module
+│   ├── generate_curriculum_benchmark.py  # Generate benchmark from curriculum chunks
+│   └── (other evaluation modules)
 │
 ├── logs/                    # Execution logs
-│   ├── EVALUATION_LOG_100_QUERIES.txt        # Baseline run
-│   ├── EVALUATION_LOG_AFTER_CORRECTION.txt   # After ground truth correction
-│   └── GROUND_TRUTH_REBUILD_LOG.txt          # Ground truth rebuild process
+│   ├── retrieval_YYYY-MM-DD_HH-MM-SS.log    # Retrieval evaluation logs
+│   └── (other evaluation logs)
 │
 ├── results/                 # Generated outputs
-│   ├── retrieval_metrics.json     # Full metrics + breakdowns
-│   └── generation_metrics.json    # Answer quality metrics (if run)
+│   ├── retrieval_metrics.json           # Full retrieval metrics + breakdowns
+│   └── (other evaluation results)
 │
 ├── docs/
-│   ├── SETUP.md             # This file
+│   ├── SETUP.md             # This file (technical setup)
 │   └── README.md            # Usage instructions
 │
 └── README.md                # Quick reference
@@ -79,39 +73,56 @@ evaluation/
 
 ## Running Evaluations
 
-### Full Retrieval Evaluation (100 queries)
+### Unified Evaluation Entry Point
+
+All evaluations are run through the unified `run_eval.py` script:
 
 ```bash
-cd evaluation
-python -m scripts.run_retrieval_eval
+python -m evaluation.scripts.run_eval --mode <MODE>
 ```
 
-**Output**: `results/retrieval_metrics.json`
+### Available Modes
 
-**Runtime**: ~5-10 minutes (depends on corpus size and retrieval speed)
+#### 1. Retrieval Evaluation (Default Mode)
 
-### Rebuild Ground Truth
-
-If ground truth becomes misaligned with corpus:
+Measures Recall@k, Precision@k, MRR, nDCG@k on 100-query benchmark:
 
 ```bash
-cd evaluation
-python -m scripts.rebuild_ground_truth
+python -m evaluation.scripts.run_eval --mode retrieval
 ```
 
-This reconstructs expected chunks from live retrieval results. Useful when:
-- Corpus structure changes
-- Chunk IDs are reorganized
-- Ground truth needs validation against current corpus
+**Output**: `evaluation/results/retrieval_metrics.json`
 
-### Generation Evaluation (Optional)
+**Runtime**: Approximately 5-10 minutes (depends on corpus size and retrieval speed)
 
-For answer quality assessment on 20-query sample:
+**What it does**:
+- Loads all benchmark queries from CSV files
+- Runs retrieval for each query
+- Calculates metrics per query and aggregates
+- Generates category, difficulty, and subject breakdowns
+- Saves detailed results to JSON
+
+#### 2. Benchmark Generation Mode
+
+Generate benchmark from curriculum chunks:
 
 ```bash
-cd evaluation
-python -m scripts.run_generation_eval
+python -m evaluation.scripts.run_eval --mode generate-bm
 ```
+
+**Output**: `evaluation/benchmarks/curriculum_generated.csv`
+
+**Usage**: Create new benchmark from existing curriculum data
+
+### Benchmark Options
+
+Specify a custom benchmark file:
+
+```bash
+python -m evaluation.scripts.run_eval --mode retrieval --benchmark path/to/custom_benchmark.csv
+```
+
+Default: `evaluation/benchmarks/curriculum_generated.csv`
 
 ## Output Format
 
@@ -171,16 +182,16 @@ python -m scripts.run_generation_eval
 
 Each benchmark CSV contains:
 
-| Column | Description |
-|--------|-------------|
-| query_id | Unique identifier (e.g., P001, C020, SS010) |
-| subject | Subject area (Physics, Chemistry, etc.) |
-| chapter | Curriculum chapter reference |
-| query_text | The query string to evaluate |
-| ground_truth_answer | Expected answer text |
-| query_category | Category of query (Factual, Concept, etc.) |
-| difficulty | Easy/Medium/Hard |
-| expected_chunks | Comma-separated doc IDs expected in retrieval |
+| Column              | Description                                   |
+| ------------------- | --------------------------------------------- |
+| query_id            | Unique identifier (e.g., P001, C020, SS010)   |
+| subject             | Subject area (Physics, Chemistry, etc.)       |
+| chapter             | Curriculum chapter reference                  |
+| query_text          | The query string to evaluate                  |
+| ground_truth_answer | Expected answer text                          |
+| query_category      | Category of query (Factual, Concept, etc.)    |
+| difficulty          | Easy/Medium/Hard                              |
+| expected_chunks     | Comma-separated doc IDs expected in retrieval |
 
 ## Interpretation
 
@@ -212,35 +223,45 @@ Breakdowns identify improvement areas:
 
 **Subject variance** → Corpus coverage gaps (insufficient documents for topic)
 
-## Ground Truth Management
+## Benchmark Management
 
-### Ground Truth Misalignment
+### Benchmark Sources
 
-Ground truth becomes invalid when:
-- Corpus chunk IDs are reorganized
-- Documents are re-chunked
-- Collection structure changes
-- Evaluation environment differs from production
+Benchmarks can come from two sources:
 
-### Detection
+1. **Manual Benchmarks**: Pre-written CSV files with queries and expected chunks
+   - Located in `evaluation/benchmarks/`
+   - Can be edited directly
+   - Version controlled
 
-If hit rates drop unexpectedly:
-1. Check if corpus has relevant documents
-2. Search manually for test queries
-3. Compare expected_chunks to actual retrieval
-4. If mismatch → rebuild ground truth
+2. **Generated Benchmarks**: Auto-generated from curriculum chunks
+   ```bash
+   python -m evaluation.scripts.run_eval --mode generate-bm
+   ```
+   - Creates `curriculum_generated.csv`
+   - Useful for large-scale evaluation
+   - Based on actual corpus content
 
-### Correction
+### Ground Truth Validation
 
-```bash
-python -m scripts.rebuild_ground_truth
-```
+If retrieval metrics seem anomalous:
 
-This script:
-1. Searches each query in current corpus
-2. Captures top-2 retrieval results per query
-3. Updates CSV expected_chunks to match
-4. Re-runs evaluation with corrected ground truth
+1. **Verify data loads**: Check that chunks are indexed in Milvus
+   ```bash
+   python scripts/view_chunks.py --stats
+   ```
+
+2. **Test manual search**: Run a query directly
+   ```bash
+   python scripts/view_chunks.py --search "query_text"
+   ```
+
+3. **Compare results**: Check if expected chunks appear in manual search
+
+4. **Regenerate if needed**: Create fresh benchmark from current corpus
+   ```bash
+   python -m evaluation.scripts.run_eval --mode generate-bm
+   ```
 
 ## Version Control
 
