@@ -22,29 +22,43 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Request Form Section -->
-            <section class="section form-section">
-                <h2>Generate Document</h2>
-                <form id="documentForm" class="document-form">
-                    <div class="form-group">
-                        <label for="request">Document Request *</label>
-                        <textarea
-                            id="request"
-                            name="request"
-                            placeholder="Describe what document you want to generate (e.g., 'Create a technical specification for a REST API')"
-                            rows="5"
-                            required
-                        ></textarea>
-                        <small>Be specific about the document type, audience, and scope</small>
-                    </div>
+            <!-- Chatbot Section -->
+            <section class="section chat-section">
+                <h2>📝 Document Generation Chat</h2>
+                <p style="color: #666; margin-bottom: 20px; font-size: 14px;">Tell me what document you need. I'll ask clarifying questions, then create it for you.</p>
 
-                    <button type="submit" class="btn btn-primary" id="submitBtn">
-                        <span class="btn-text">Generate Document</span>
-                        <span class="btn-loading" style="display: none;">
-                            ⏳ Generating...
-                        </span>
-                    </button>
-                </form>
+                <!-- Chat Messages -->
+                <div id="chatMessages" class="chat-messages">
+                    <div class="chat-message assistant">
+                        <div class="message-bubble">Hi! I'm your document generation assistant. What document would you like to create today?</div>
+                    </div>
+                </div>
+
+                <!-- Chat Input Area -->
+                <div class="chat-input-section">
+                    <div id="chatQuestionsArea" class="chat-questions">
+                        <div style="display: flex; gap: 8px;">
+                            <textarea
+                                id="chatInput"
+                                placeholder="e.g., 'Create a technical specification for a REST API'"
+                                rows="3"
+                                style="flex: 1; padding: 10px; border: 2px solid #dee2e6; border-radius: 6px; font-family: inherit;"
+                            ></textarea>
+                            <button id="chatSendBtn" class="btn btn-primary" style="align-self: flex-end; height: fit-content;" onclick="sendChatMessage()">Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div id="progressSection" style="display: none; margin-top: 16px; padding: 12px; background: #f8f9fa; border-radius: 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 14px; font-weight: 600;">Information Collected</span>
+                        <span id="progressPercent" style="font-size: 14px; color: #0066cc; font-weight: 600;">0%</span>
+                    </div>
+                    <div style="width: 100%; height: 6px; background: #dee2e6; border-radius: 3px; overflow: hidden;">
+                        <div id="progressBar" style="width: 0%; height: 100%; background: #28a745; transition: width 0.3s;"></div>
+                    </div>
+                </div>
             </section>
 
             <!-- Results Section -->
@@ -180,28 +194,34 @@
                 </div>
             </section>
 
-            <!-- Examples Section -->
-            <section class="section examples-section">
-                <h2>Try Examples</h2>
-                <div class="examples-grid">
-                    <div class="example-card" onclick="fillExample(this)">
-                        <h4>📋 Technical Specification</h4>
-                        <p>Create a technical specification for a RESTful API that manages a library catalog system</p>
+            <!-- Generated Documents List Section -->
+            <section class="section generated-docs-section">
+                <div class="section-header">
+                    <h2>Generated Documents</h2>
+                    <button type="button" class="btn btn-small" id="refreshDocsBtn" onclick="loadDocuments()">
+                        [Refresh]
+                    </button>
+                </div>
+
+                <div class="docs-stats">
+                    <div class="stat">
+                        <span class="stat-label">Total Files:</span>
+                        <span class="stat-value" id="totalDocs">0</span>
                     </div>
-                    <div class="example-card" onclick="fillExample(this)">
-                        <h4>💼 Business Proposal</h4>
-                        <p>Generate a business proposal for implementing cloud infrastructure migration</p>
+                    <div class="stat">
+                        <span class="stat-label">Total Size:</span>
+                        <span class="stat-value" id="totalSize">0 MB</span>
                     </div>
-                    <div class="example-card" onclick="fillExample(this)">
-                        <h4>🛡️ Security Policy</h4>
-                        <p>Write comprehensive information security policy and procedures document</p>
-                    </div>
-                    <div class="example-card" onclick="fillExample(this)">
-                        <h4>🔧 Disaster Recovery</h4>
-                        <p>Create disaster recovery procedures for a production Kubernetes cluster</p>
+                </div>
+
+                <div id="docsList" class="docs-list">
+                    <div class="docs-loading">
+                        <div class="spinner-small"></div>
+                        Loading documents...
                     </div>
                 </div>
             </section>
+
         </main>
 
         <!-- Footer -->

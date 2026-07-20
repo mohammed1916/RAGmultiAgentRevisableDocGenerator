@@ -1,0 +1,65 @@
+sequenceDiagram
+    participant User
+    participant ChatAPI as API Layer<br/>(ChatAPI)
+    participant ChatOrch as Orchestration<br/>(ChatOrchestrator)
+    participant LangGraph as Orchestration<br/>(LangGraphOrch)
+    participant Extractor as State Management<br/>(Extractor)
+    participant Validator as State Management<br/>(Validator)
+    participant SAP as State Management<br/>(SAP)
+    participant Embed as Knowledge<br/>(SentenceTransformer)
+    participant Milvus as Knowledge<br/>(Milvus)
+    participant Planner as Agent<br/>(Planner Agent)
+    participant Writer as Agent<br/>(Writer Agent)
+    participant Reviewer as Agent<br/>(Reviewer Agent)
+    participant Ollama as LLM<br/>(Ollama)
+    participant DocStruct as Document<br/>(Structure)
+    participant Markdown as Document<br/>(Markdown)
+    participant DOCX as Document<br/>(DOCXGen)
+    participant FileAPI as API Layer<br/>(FileAPI)
+
+    User->>ChatAPI: Send message
+    ChatAPI->>ChatOrch: Forward conversation
+    ChatOrch->>Ollama: Generate response
+    Ollama-->>ChatOrch: Response/Questions
+    ChatOrch-->>ChatAPI: Reply
+    ChatAPI-->>User: Display
+
+    User->>ChatAPI: Student progress/info
+    ChatAPI->>LangGraph: Trigger document generation
+
+    LangGraph->>Extractor: Extract progress claims
+    Extractor->>Validator: Validate claims
+    Validator->>SAP: Store in StudentState
+
+    SAP->>Embed: Embed query topics<br/>(with student class_level)
+    Embed->>Milvus: Search collection<br/>(documents_class_10 OR<br/>documents_class_12)
+    Milvus-->>Embed: Retrieved context<br/>(class-specific)
+    Embed-->>SAP: Embedded results
+
+    SAP->>Planner: State + Context → Plan
+    Planner->>Ollama: Generate plan
+    Ollama-->>Planner: Plan nodes
+
+    Planner->>Writer: Plan
+    Writer->>Ollama: Generate sections (initial)
+    Ollama-->>Writer: Content
+
+    Writer->>Reviewer: Submit for review
+    Reviewer->>Ollama: Quality check (iteration 1/2)
+    Ollama-->>Reviewer: Feedback
+
+    alt Issues Found & iteration < 2
+        Reviewer->>Writer: Revision feedback
+        Writer->>Ollama: Refine sections (with feedback)
+        Ollama-->>Writer: Refined content
+        Writer->>Reviewer: Submit refined sections
+        Reviewer->>Ollama: Quality check (iteration 2/2)
+        Ollama-->>Reviewer: Feedback
+    end
+
+    Reviewer->>DocStruct: Approved or Max iterations reached
+    DocStruct->>Markdown: Format markdown
+    DocStruct->>Markdown: Format markdown
+    Markdown->>DOCX: Convert to .docx
+    DOCX-->>FileAPI: Document file
+    FileAPI-->>User: Download .docx

@@ -1,0 +1,122 @@
+{
+  "timestamp": "2026-07-13T10:10:45.020747",
+  "total_tests": 3,
+  "successful": 3,
+  "failed": 0,
+  "results": [
+    {
+      "prompt": "Create an advanced study guide comparing electric ",
+      "difficulty": "HARD",
+      "run": 1,
+      "success": true,
+      "metrics": {
+        "rouge": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0
+        },
+        "bleu": {
+          "bleu_1": 1.0,
+          "bleu_2": 1.0,
+          "bleu_3": 1.0,
+          "bleu_4": 1.0,
+          "bleu": 1.0
+        },
+        "semantic_similarity": {
+          "semantic_similarity": 1.0
+        },
+        "groundedness": {
+          "groundedness": 1.0,
+          "grounded_tokens": 46,
+          "total_tokens": 46,
+          "grounded_ratio": 1.0
+        },
+        "context_utilization": {
+          "context_utilization": 1.0,
+          "unique_context_tokens_used": 40,
+          "total_context_tokens": 40
+        },
+        "overall_evaluation_score": 1.0
+      },
+      "error": null,
+      "iterations": 2,
+      "sections": 1
+    },
+    {
+      "prompt": "Develop a comprehensive physics problem set coveri",
+      "difficulty": "HARD",
+      "run": 1,
+      "success": true,
+      "metrics": {
+        "rouge": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0
+        },
+        "bleu": {
+          "bleu_1": 1.0,
+          "bleu_2": 1.0,
+          "bleu_3": 1.0,
+          "bleu_4": 1.0,
+          "bleu": 1.0
+        },
+        "semantic_similarity": {
+          "semantic_similarity": 1.0
+        },
+        "groundedness": {
+          "groundedness": 1.0,
+          "grounded_tokens": 5,
+          "total_tokens": 5,
+          "grounded_ratio": 1.0
+        },
+        "context_utilization": {
+          "context_utilization": 1.0,
+          "unique_context_tokens_used": 3,
+          "total_context_tokens": 3
+        },
+        "overall_evaluation_score": 1.0
+      },
+      "error": null,
+      "iterations": 2,
+      "sections": 1
+    },
+    {
+      "prompt": "Generate a thesis outline explaining the relations",
+      "difficulty": "HARD",
+      "run": 1,
+      "success": true,
+      "metrics": {
+        "rouge": {
+          "rouge1": 1.0,
+          "rouge2": 1.0,
+          "rougeL": 1.0
+        },
+        "bleu": {
+          "bleu_1": 1.0,
+          "bleu_2": 1.0,
+          "bleu_3": 1.0,
+          "bleu_4": 1.0,
+          "bleu": 1.0
+        },
+        "semantic_similarity": {
+          "semantic_similarity": 1.0
+        },
+        "groundedness": {
+          "groundedness": 1.0,
+          "grounded_tokens": 56,
+          "total_tokens": 56,
+          "grounded_ratio": 1.0
+        },
+        "context_utilization": {
+          "context_utilization": 1.0,
+          "unique_context_tokens_used": 48,
+          "total_context_tokens": 48
+        },
+        "overall_evaluation_score": 1.0
+      },
+      "error": null,
+      "iterations": 2,
+      "sections": 1
+    }
+  ]
+}

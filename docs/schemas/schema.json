@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Curriculum Document Schema",
+  "type": "object",
+  "required": ["id", "title", "subject", "content", "metadata"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique document identifier"
+    },
+    "title": {
+      "type": "string",
+      "description": "Document title"
+    },
+    "subject": {
+      "type": "string",
+      "description": "Subject/topic of the document",
+      "enum": ["JEE Mathematics", "CBSE Physics", "Python Programming"]
+    },
+    "content": {
+      "type": "string",
+      "description": "Full document content (will be chunked)"
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["exam", "difficulty", "chapter"],
+      "properties": {
+        "exam": {
+          "type": "string",
+          "description": "Exam type (JEE, CBSE, etc)"
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": ["Beginner", "Basic", "Intermediate", "Advanced"]
+        },
+        "chapter": {
+          "type": "integer",
+          "description": "Chapter number"
+        },
+        "language": {
+          "type": "string",
+          "description": "Programming language (for code docs)"
+        }
+      }
+    }
+  }
+}

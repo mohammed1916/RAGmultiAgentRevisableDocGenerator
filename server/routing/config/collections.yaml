@@ -1,0 +1,123 @@
+# Collection Registry Configuration
+# Defines all available knowledge source collections for routing
+
+collections:
+  - name: cbse_class_10
+    display_name: CBSE Class 10
+    description: CBSE Class X (10th grade) syllabi covering Maths, Science, and Social Science
+    source_type: cbse
+    keywords:
+      - Class 10
+      - secondary
+      - board exam
+      - 10th grade
+      - X
+    tags:
+      - board
+      - science
+      - social-science
+      - mathematics
+    active: true
+    document_count: 126
+    metadata:
+      academic_level: Secondary
+      max_marks: 80
+
+  - name: cbse_class_12
+    display_name: CBSE Class 12
+    description: CBSE Class XII (12th grade) syllabi covering Physics, Chemistry, Biology, Maths, and other subjects
+    source_type: cbse
+    keywords:
+      - Class 12
+      - senior secondary
+      - board exam
+      - 12th grade
+      - XII
+      - senior
+    tags:
+      - board
+      - science
+      - commerce
+      - humanities
+      - physics
+      - chemistry
+      - biology
+      - mathematics
+    active: true
+    document_count: 924
+    metadata:
+      academic_level: Senior Secondary
+      max_marks: 100
+
+  - name: jee
+    display_name: JEE Main & Advanced
+    description: JEE (Joint Entrance Exam) syllabi for engineering entrance preparation
+    source_type: jee
+    keywords:
+      - JEE
+      - engineering
+      - competitive exam
+      - entrance
+      - JEE Main
+      - JEE Advanced
+    tags:
+      - competitive
+      - engineering
+      - advanced
+    active: false
+    metadata:
+      exam_level: National
+      difficulty: Advanced
+
+  - name: neet
+    display_name: NEET
+    description: NEET (National Eligibility cum Entrance Test) syllabi for medical entrance preparation
+    source_type: neet
+    keywords:
+      - NEET
+      - medical
+      - competitive exam
+      - entrance
+    tags:
+      - competitive
+      - medical
+      - advanced
+    active: false
+    metadata:
+      exam_level: National
+      difficulty: Advanced
+
+  - name: gate
+    display_name: GATE
+    description: GATE (Graduate Aptitude Test in Engineering) syllabi
+    source_type: gate
+    keywords:
+      - GATE
+      - engineering
+      - postgraduate
+    tags:
+      - competitive
+      - engineering
+      - postgraduate
+    active: false
+    metadata:
+      exam_level: National
+      difficulty: Advanced
+
+  - name: upsc
+    display_name: UPSC IAS
+    description: UPSC IAS (Indian Administrative Service) preparation materials
+    source_type: upsc
+    keywords:
+      - UPSC
+      - IAS
+      - civil services
+      - government
+    tags:
+      - competitive
+      - government
+      - humanities
+    active: false
+    metadata:
+      exam_level: National
+      difficulty: Very Advanced

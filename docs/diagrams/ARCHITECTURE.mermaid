@@ -1,0 +1,128 @@
+graph TB
+
+%% =========================
+%% Presentation Layer
+%% =========================
+subgraph Presentation["Presentation Layer"]
+    UI["Chat Interface"]
+    Files["Generated .docx Files"]
+end
+
+%% =========================
+%% API Layer
+%% =========================
+subgraph API["API Layer"]
+    ChatAPI["Chat API"]
+    FileAPI["File API"]
+end
+
+%% =========================
+%% Orchestration Layer
+%% =========================
+subgraph Orch["Orchestration Layer"]
+    ChatOrch["ChatOrchestrator<br/>(Conversation Manager)"]
+    LangGraph["LangGraphOrchestrator<br/>(Plan → Write → Review → Generate)"]
+end
+
+%% =========================
+%% AI Agents
+%% =========================
+subgraph Agents["AI Agent Layer"]
+    Router["Router Agent<br/>(Collection Selection)"]
+    Planner["Planner Agent<br/>(Plan Generation)"]
+    Writer["Writer Agent<br/>(Content Writing<br/>& Refinement)"]
+    Reviewer["Reviewer Agent<br/>(Quality Check)"]
+end
+
+%% =========================
+%% Knowledge Layer
+%% =========================
+subgraph Knowledge["Knowledge Layer (RAG)"]
+    Embed["SentenceTransformer<br/>all-MiniLM-L6-v2"]
+    subgraph MilvusCollections["Milvus Vector Database"]
+        Col10["cbse_class_10<br/>(CBSE Class 10)"]
+        Col12["cbse_class_12<br/>(CBSE Class 12)"]
+        ColJEE["jee<br/>(JEE Main & Advanced)"]
+        ColOther["neet, gate, upsc<br/>(Future collections)"]
+    end
+    Context["Retrieved Curriculum Context<br/>(Curriculum-specific docs)"]
+end
+
+%% =========================
+%% LLM Layer
+%% =========================
+subgraph LLM["LLM Layer"]
+    Ollama["Ollama"]
+end
+
+%% =========================
+%% Document Generation
+%% =========================
+subgraph Docs["Document Generation"]
+    Structure["DocumentStructure"]
+    Markdown["MarkdownFormatter"]
+    DOCX["DOCXGenerator"]
+    Word["Microsoft Word (.docx)"]
+end
+
+%% =========================
+%% State Management Layer
+%% =========================
+subgraph StateManagement["State Management Layer"]
+    Extractor["Progress Extractor<br/>(Parse progress claims)"]
+    Validator["Progress Validator<br/>(Verify claims)"]
+    State["StudentState<br/>(Learned topics,<br/>timeline, progress)"]
+    SAP["State-Aware Planner<br/>(Respects learned topics)"]
+end
+
+%% =========================
+%% Flow
+%% =========================
+
+UI --> ChatAPI
+
+ChatAPI --> ChatOrch
+ChatAPI --> LangGraph
+
+ChatOrch --> Ollama
+
+%% State extraction and management
+LangGraph --> Extractor
+Extractor --> Validator
+Validator --> State
+State --> SAP
+
+%% Planning with state awareness + document retrieval
+SAP -->|curriculum_type + query| Router
+Router --> Embed
+Embed -->|route by curriculum| Col10
+Embed -->|route by curriculum| Col12
+Embed -->|route by curriculum| ColJEE
+Col10 -->|fetch docs| Context
+Col12 -->|fetch docs| Context
+ColJEE -->|fetch docs| Context
+Context --> Router
+
+Router -->|context + state| Planner
+
+Planner -->|plan| Writer
+
+Writer -->|write sections| Ollama
+Writer -->|refine sections| Ollama
+
+Writer --> Structure
+
+Structure --> Reviewer
+
+Reviewer -->|No issues| Markdown
+Reviewer -->|Issues found<br/>Iteration < 2| Writer
+Writer -->|with revision<br/>feedback| Reviewer
+Reviewer -->|Iteration >= 2<br/>or Approved| Markdown
+
+Markdown --> DOCX
+DOCX --> Word
+
+Word --> FileAPI
+FileAPI --> Files
+
+style StateManagement fill:#e1f5ff,stroke:#01579b,stroke-width:2px

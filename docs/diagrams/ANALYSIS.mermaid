@@ -1,0 +1,110 @@
+graph TB
+
+%% =========================
+%% Input Sources
+%% =========================
+subgraph Input["Input Data"]
+    GenDoc["Generated Document<br/>(Output from pipeline)"]
+    RefDoc["Reference Content<br/>(Curriculum corpus)"]
+    Context["Context<br/>(Retrieved documents)"]
+    ExecLogs["Execution Logs<br/>(Agent latencies, tokens)"]
+end
+
+%% =========================
+%% Evaluation Layer
+%% =========================
+subgraph Evaluation["Evaluation & Metrics Layer"]
+    ContentEval["ContentEvaluator<br/>(BLEU, ROUGE)"]
+    GroundEval["Groundedness Evaluator"]
+    ContextUtilEval["Context Utilization Evaluator"]
+    PerfMetrics["Metrics Collector<br/>(Latency, Tokens)"]
+end
+
+%% =========================
+%% Quality Metrics with Formulas
+%% =========================
+subgraph QualityMetrics["Quality Metrics"]
+    BLEU["<b>BLEU Score</b><br/>BP × exp(Σ log(p_n)/4)<br/>BP = 1 if len≥ref else exp(1-ref/gen)"]
+    ROUGE1["<b>ROUGE-1</b><br/>|unigrams∩|/|ref_unigrams|"]
+    ROUGE2["<b>ROUGE-2</b><br/>|bigrams∩|/|ref_bigrams|"]
+    ROUGEL["<b>ROUGE-L</b><br/>LCS_length/len(ref)"]
+    Ground["<b>Groundedness</b><br/>grounded_tokens/total_tokens<br/>(tokens in context)"]
+    ContextUtil["<b>Context Utilization</b><br/>|gen_tokens∩context|/|context_tokens|"]
+    SemanticSim["<b>Semantic Similarity</b><br/>Jaccard = |A∩B|/|A∪B|"]
+end
+
+%% =========================
+%% Performance Metrics with Formulas
+%% =========================
+subgraph PerfMetrics["Performance Metrics"]
+    PlanLatency["<b>Planner Latency</b><br/>t_end - t_start (ms)<br/>÷ num_tasks = per-task"]
+    WriteLatency["<b>Writer Latency</b><br/>t_end - t_start (ms)<br/>÷ num_sections = per-section"]
+    ReviewLatency["<b>Reviewer Latency</b><br/>t_end - t_start (ms)<br/>÷ review_iterations = avg/iter"]
+    DocxLatency["<b>DOCX Gen Latency</b><br/>t_end - t_start (ms)"]
+    TokenCount["<b>Token Usage</b><br/>Σ prompt_tokens + Σ completion_tokens<br/>throughput = tokens/ms"]
+    ReviewIter["<b>Review Iterations</b><br/>count (1-2 max)"]
+    TotalExec["<b>Total Execution Time</b><br/>t_pipeline_end - t_start (ms)<br/>= Plan + Write + Review + DOCX"]
+end
+
+%% =========================
+%% Analysis Output
+%% =========================
+subgraph Output["Final Scores"]
+    BaseScore["<b>Base Quality Score</b><br/>0.25×ROUGE1 + 0.25×ROUGE2<br/>+ 0.25×BLEU + 0.25×SemanticSim"]
+    ContextScore["<b>With Context</b><br/>0.7×BaseScore + 0.3×Groundedness"]
+    Report["Comprehensive Metrics Report"]
+end
+
+%% =========================
+%% Flow
+%% =========================
+
+GenDoc --> ContentEval
+RefDoc --> ContentEval
+GenDoc --> GroundEval
+Context --> GroundEval
+GenDoc --> ContextUtilEval
+Context --> ContextUtilEval
+ExecLogs --> PerfMetrics
+
+ContentEval --> BLEU
+ContentEval --> ROUGE1
+ContentEval --> ROUGE2
+ContentEval --> ROUGEL
+GroundEval --> Ground
+ContextUtilEval --> ContextUtil
+RefDoc --> SemanticSim
+GenDoc --> SemanticSim
+
+PerfMetrics --> PlanLatency
+PerfMetrics --> WriteLatency
+PerfMetrics --> ReviewLatency
+PerfMetrics --> DocxLatency
+PerfMetrics --> TokenCount
+PerfMetrics --> ReviewIter
+PerfMetrics --> TotalExec
+
+BLEU --> BaseScore
+ROUGE1 --> BaseScore
+ROUGE2 --> BaseScore
+ROUGEL --> BaseScore
+SemanticSim --> BaseScore
+
+BaseScore --> ContextScore
+Ground --> ContextScore
+
+ContextScore --> Report
+PlanLatency --> Report
+WriteLatency --> Report
+ReviewLatency --> Report
+DocxLatency --> Report
+TokenCount --> Report
+ReviewIter --> Report
+TotalExec --> Report
+
+style ContentEval fill:#fff3e0,stroke:#e65100,stroke-width:2px
+style GroundEval fill:#fff3e0,stroke:#e65100,stroke-width:2px
+style ContextUtilEval fill:#fff3e0,stroke:#e65100,stroke-width:2px
+style QualityMetrics fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+style PerfMetrics fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+style Output fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px
