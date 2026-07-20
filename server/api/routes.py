@@ -1,22 +1,30 @@
-"""FastAPI server for document generation."""
+"""FastAPI server for document generation and the Learning OS."""
 
 import os
-from pathlib import Path
+import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import anyio
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from ..base.models import DocumentRequest, DocumentResponse, ChatContext, ChatResponse, GenerateFromChatRequest, DocumentStructure
-from ..core import Orchestrator
-from ..core import ChatOrchestrator
-from ..core import LangGraphOrchestrator
+from ..base.models import (
+    DocumentRequest,
+    DocumentResponse,
+    ChatResponse,
+    GenerateFromChatRequest,
+    DocumentStructure,
+)
+from ..core import Orchestrator, ChatOrchestrator, LangGraphOrchestrator
 from ..agents.todo_generator import TodoGenerator
-from ..tools import DOCXGenerator
+from ..tools import DOCXGenerator, OllamaClient
 from ..base.exceptions import DocumentGenerationException
 from ..base.logger import setup_logger
+from ..config import config
 from ..learning_os import (
     DocumentCreate,
     LearningDocument,
@@ -30,72 +38,156 @@ from ..learning_os import (
     Workspace,
     WorkspaceCreate,
 )
+from ..learning_os.repository import LearningRepository
+from ..learning_os.ingestion import IngestionService
 
 logger = setup_logger(__name__)
 
+
+def _cors_origins() -> list[str]:
+    """Return the configured CORS allowlist.
+
+    ``CORS_ORIGINS`` is a comma-separated list. Wide-open ``*`` is only honoured
+    in an explicit dev opt-in and is incompatible with credentialed requests.
+    """
+    raw = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:8000")
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize shared resources once, and dispose them on shutdown.
+
+    The database is a hard dependency: startup fails if Postgres is unreachable.
+    The LLM/RAG orchestrators are best-effort so the API can still serve the
+    Learning-OS data endpoints when the model backend is temporarily down.
+    """
+    logger.info("Starting up API server...")
+
+    # --- Database (required) ---
+    try:
+        repository = LearningRepository()
+        if not repository.ping():
+            raise RuntimeError("Database ping failed")
+    except Exception as error:
+        logger.error("Database initialization failed: %s", error)
+        raise
+
+    # --- Shared LLM client (best-effort) ---
+    llm_client = None
+    try:
+        llm_client = OllamaClient()
+    except Exception as error:
+        logger.warning("LLM client unavailable at startup: %s", error)
+
+    app.state.repository = repository
+    app.state.learning_service = LearningOSService(repository=repository, llm_client=llm_client)
+    app.state.chat_sessions = {}
+    app.state.ingestion_service = None
+
+    # --- Document-generation orchestrators (best-effort) ---
+    app.state.orchestrator = None
+    app.state.langgraph_orchestrator = None
+    app.state.chat_orchestrator = None
+    app.state.todo_generator = None
+    try:
+        app.state.orchestrator = Orchestrator()
+        app.state.langgraph_orchestrator = LangGraphOrchestrator(orchestrator=app.state.orchestrator)
+        app.state.chat_orchestrator = ChatOrchestrator()
+        app.state.todo_generator = TodoGenerator()
+        logger.info("Document-generation orchestrators initialized")
+    except Exception as error:
+        logger.warning("Document-generation orchestrators unavailable at startup: %s", error)
+
+    # --- Ingestion service (reuses the orchestrator's Milvus RAG when present) ---
+    try:
+        rag_system = getattr(app.state.orchestrator, "rag_system", None)
+        app.state.ingestion_service = IngestionService(rag_system=rag_system)
+        logger.info("Ingestion service initialized (vector store available: %s)",
+                    app.state.ingestion_service.rag_available)
+    except Exception as error:
+        logger.warning("Ingestion service unavailable at startup: %s", error)
+
+    try:
+        yield
+    finally:
+        logger.info("Shutting down API server...")
+        for closable in (
+            getattr(app.state, "orchestrator", None),
+            getattr(app.state, "repository", None),
+        ):
+            close = getattr(closable, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception as error:  # pragma: no cover
+                    logger.warning("Error during shutdown close: %s", error)
+
+
 app = FastAPI(
     title="Document Generation API",
-    description="Autonomous multi-agent document generation system",
-    version="1.0.0",
+    description="Autonomous multi-agent document generation + Learning OS",
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
-# Enable CORS
+# CORS: credentials only enabled when a concrete origin allowlist is configured.
+_origins = _cors_origins()
+_allow_credentials = "*" not in _origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Global orchestrator instances
-orchestrator = None
-chat_orchestrator = ChatOrchestrator()
-langgraph_orchestrator = None
-todo_generator = TodoGenerator()
-learning_os_service = LearningOSService()
-
-# Store chat sessions
-chat_sessions = {}
-
-# Mount static files (client UI)
+# Mount static files (client UI) if present.
 try:
-    from pathlib import Path
-    # Client is at project root: client/ (not in server/)
     client_path = Path(__file__).parent.parent.parent / "client"
     if client_path.exists():
         app.mount("/client", StaticFiles(directory=str(client_path)), name="static")
-        logger.info(f"Mounted static files from {client_path}")
+        logger.info("Mounted static files from %s", client_path)
     else:
-        logger.warning(f"Client directory not found at {client_path}")
-except Exception as e:
-    logger.warning(f"Could not mount static files: {str(e)}")
+        logger.warning("Client directory not found at %s", client_path)
+except Exception as error:
+    logger.warning("Could not mount static files: %s", error)
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize orchestrators on startup."""
-    global orchestrator, langgraph_orchestrator
-    logger.info("Starting up API server...")
-    try:
-        orchestrator = Orchestrator()
-        logger.info("Custom orchestrator initialized successfully")
+# --------------------------------------------------------------------- helpers
 
-        langgraph_orchestrator = LangGraphOrchestrator()
-        logger.info("LangGraph orchestrator initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize orchestrator: {str(e)}")
-        raise
+def _service(request: Request) -> LearningOSService:
+    return request.app.state.learning_service
 
+
+def _require(component, name: str):
+    if component is None:
+        raise HTTPException(status_code=503, detail=f"{name} is not available")
+    return component
+
+
+def _fail(error: Exception, public_message: str) -> HTTPException:
+    """Log the full error server-side; return a generic message to the client."""
+    logger.error("%s: %s", public_message, error)
+    return HTTPException(status_code=500, detail=public_message)
+
+
+# ---------------------------------------------------------------------- health
 
 @app.get("/health")
-async def health_check():
-    """Health check endpoint."""
+async def health_check(request: Request):
+    """Health check with dependency status."""
+    repo = getattr(request.app.state, "repository", None)
+    db_ok = bool(repo and repo.ping())
     return {
-        "status": "healthy",
+        "status": "healthy" if db_ok else "degraded",
         "service": "document-generation-api",
+        "database": "up" if db_ok else "down",
+        "generation": "up" if getattr(request.app.state, "orchestrator", None) else "down",
     }
 
+
+# --------------------------------------------------------------- learning spec
 
 @app.get("/learning/spec")
 async def learning_specification():
@@ -107,138 +199,199 @@ async def learning_specification():
             "profile-isolated learning resources",
             "profile-owned workspaces",
             "workspace documents with retrieval metadata",
+            "LLM-derived knowledge graph",
         ],
     }
 
 
 @app.get("/learning/demo")
-async def load_learning_demo(user_id: str = "demo-user"):
+async def load_learning_demo(request: Request, user_id: str = "demo-user"):
     """Create starter data once and return all profiles for the learning shell."""
-    profiles = learning_os_service.ensure_demo_data(user_id)
+    service = _service(request)
+    profiles = await anyio.to_thread.run_sync(service.ensure_demo_data, user_id)
     return [profile.model_dump(mode="json") for profile in profiles]
 
 
 @app.get("/learning/profiles")
-async def list_learning_profiles(user_id: str):
+async def list_learning_profiles(request: Request, user_id: str):
     """List the learning profiles that belong to a user."""
-    return [profile.model_dump(mode="json") for profile in learning_os_service.list_profiles(user_id)]
+    service = _service(request)
+    profiles = await anyio.to_thread.run_sync(service.list_profiles, user_id)
+    return [profile.model_dump(mode="json") for profile in profiles]
 
 
 @app.get("/learning/profiles/{profile_id}/dashboard")
-async def get_learning_dashboard(profile_id: str, user_id: str):
+async def get_learning_dashboard(request: Request, profile_id: str, user_id: str):
     """Return a profile-scoped workspace, planner, graph, and analytics snapshot."""
+    service = _service(request)
     try:
-        return learning_os_service.dashboard(profile_id, user_id)
+        return await anyio.to_thread.run_sync(service.dashboard, profile_id, user_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
-@app.get("/learning/profiles/{profile_id}/search")
-async def search_learning_profile(profile_id: str, user_id: str, q: str):
-    """Search only the active profile's documents and metadata."""
+@app.post("/learning/profiles/{profile_id}/graph/refresh")
+async def refresh_learning_graph(request: Request, profile_id: str, user_id: str):
+    """Rebuild the LLM-derived knowledge graph for a profile."""
+    service = _service(request)
     try:
-        return learning_os_service.search(profile_id, user_id, q)
+        return await anyio.to_thread.run_sync(service.refresh_graph, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise _fail(error, "Knowledge graph could not be generated")
+
+
+@app.get("/learning/profiles/{profile_id}/search")
+async def search_learning_profile(request: Request, profile_id: str, user_id: str, q: str):
+    """Search only the active profile's documents and metadata."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.search, profile_id, user_id, q)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.patch("/learning/documents/{document_id}/content", response_model=LearningDocument)
-async def update_learning_document(document_id: str, user_id: str, content: str) -> LearningDocument:
+async def update_learning_document(
+    request: Request, document_id: str, user_id: str, content: str
+) -> LearningDocument:
     """Save a document revision in the active profile."""
+    service = _service(request)
     try:
-        return learning_os_service.update_document(document_id, user_id, content)
+        return await anyio.to_thread.run_sync(service.update_document, document_id, user_id, content)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.patch("/learning/profiles/{profile_id}/tasks/{task_id}")
 async def update_learning_task(
-    profile_id: str, task_id: str, user_id: str, request: TaskStatusUpdate
+    request: Request, profile_id: str, task_id: str, user_id: str, body: TaskStatusUpdate
 ):
     """Move a task through the profile's planner states."""
+    service = _service(request)
     try:
-        return learning_os_service.update_task_status(profile_id, user_id, task_id, request.status)
+        return await anyio.to_thread.run_sync(
+            service.update_task_status, profile_id, user_id, task_id, body.status
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/learning/profiles/{profile_id}/flashcards/{card_id}/review")
 async def review_learning_flashcard(
-    profile_id: str, card_id: str, user_id: str, request: FlashcardReview
+    request: Request, profile_id: str, card_id: str, user_id: str, body: FlashcardReview
 ):
     """Schedule the next review after a recall rating."""
+    service = _service(request)
     try:
-        return learning_os_service.review_flashcard(profile_id, user_id, card_id, request.rating)
+        return await anyio.to_thread.run_sync(
+            service.review_flashcard, profile_id, user_id, card_id, body.rating
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/learning/profiles/{profile_id}/tutor")
-async def ask_learning_tutor(profile_id: str, user_id: str, request: StudyQuestion):
+async def ask_learning_tutor(
+    request: Request, profile_id: str, user_id: str, body: StudyQuestion
+):
     """Answer a question using notes restricted to the active profile."""
+    service = _service(request)
     try:
-        return learning_os_service.tutor(profile_id, user_id, request.question)
+        return await anyio.to_thread.run_sync(service.tutor, profile_id, user_id, body.question)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/learning/infrastructure")
-async def learning_infrastructure_status():
+async def learning_infrastructure_status(request: Request):
     """Expose optional local AI and vector service availability."""
-    return learning_os_service.infrastructure_status()
+    service = _service(request)
+    return await anyio.to_thread.run_sync(service.infrastructure_status)
 
 
 @app.post("/learning/profiles", response_model=LearningProfile, status_code=201)
-async def create_learning_profile(request: LearningProfileCreate) -> LearningProfile:
+async def create_learning_profile(request: Request, body: LearningProfileCreate) -> LearningProfile:
     """Create an isolated learning profile for a user's study goal."""
-    return learning_os_service.create_profile(request)
+    service = _service(request)
+    return await anyio.to_thread.run_sync(service.create_profile, body)
 
 
 @app.get("/learning/profiles/{profile_id}", response_model=LearningProfile)
-async def get_learning_profile(profile_id: str, user_id: str) -> LearningProfile:
+async def get_learning_profile(request: Request, profile_id: str, user_id: str) -> LearningProfile:
     """Read a learning profile owned by the requesting user."""
+    service = _service(request)
     try:
-        return learning_os_service.get_profile(profile_id, user_id)
+        return await anyio.to_thread.run_sync(service.get_profile, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/archive", response_model=LearningProfile)
+async def archive_learning_profile(
+    request: Request, profile_id: str, user_id: str, archived: bool = True
+) -> LearningProfile:
+    """Archive (or restore) a profile without deleting its data."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(
+            service.archive_profile, profile_id, user_id, archived
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/learning/profiles/{profile_id}", status_code=204)
+async def delete_learning_profile(request: Request, profile_id: str, user_id: str):
+    """Permanently delete a profile and everything scoped to it."""
+    service = _service(request)
+    try:
+        await anyio.to_thread.run_sync(service.delete_profile, profile_id, user_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.patch("/learning/profiles/{profile_id}/preferences", response_model=LearningProfile)
 async def update_learning_profile_preferences(
-    profile_id: str,
-    user_id: str,
-    request: ProfilePreferencesUpdate,
+    request: Request, profile_id: str, user_id: str, body: ProfilePreferencesUpdate
 ) -> LearningProfile:
     """Merge preference changes into a profile owned by the requesting user."""
+    service = _service(request)
     try:
-        return learning_os_service.update_preferences(profile_id, user_id, request)
+        return await anyio.to_thread.run_sync(
+            service.update_preferences, profile_id, user_id, body
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/learning/workspaces", response_model=Workspace, status_code=201)
-async def create_learning_workspace(request: WorkspaceCreate) -> Workspace:
+async def create_learning_workspace(request: Request, body: WorkspaceCreate) -> Workspace:
     """Create a workspace after verifying profile ownership."""
+    service = _service(request)
     try:
-        return learning_os_service.create_workspace(request)
+        return await anyio.to_thread.run_sync(service.create_workspace, body)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/learning/workspaces/{workspace_id}", response_model=Workspace)
-async def get_learning_workspace(workspace_id: str, user_id: str) -> Workspace:
+async def get_learning_workspace(request: Request, workspace_id: str, user_id: str) -> Workspace:
     """Read a workspace owned by the requesting user."""
+    service = _service(request)
     try:
-        return learning_os_service.get_workspace(workspace_id, user_id)
+        return await anyio.to_thread.run_sync(service.get_workspace, workspace_id, user_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/learning/documents", response_model=LearningDocument, status_code=201)
-async def create_learning_document(request: DocumentCreate) -> LearningDocument:
+async def create_learning_document(request: Request, body: DocumentCreate) -> LearningDocument:
     """Store a document within its workspace and profile boundary."""
+    service = _service(request)
     try:
-        return learning_os_service.create_document(request)
+        return await anyio.to_thread.run_sync(service.create_document, body)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
@@ -246,132 +399,191 @@ async def create_learning_document(request: DocumentCreate) -> LearningDocument:
 
 
 @app.get("/learning/documents/{document_id}", response_model=LearningDocument)
-async def get_learning_document(document_id: str, user_id: str) -> LearningDocument:
+async def get_learning_document(request: Request, document_id: str, user_id: str) -> LearningDocument:
     """Read a document owned by the requesting user."""
+    service = _service(request)
     try:
-        return learning_os_service.get_document(document_id, user_id)
+        return await anyio.to_thread.run_sync(service.get_document, document_id, user_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/learning/profiles/{profile_id}/documents", response_model=list[LearningDocument])
-async def list_learning_documents(profile_id: str, user_id: str) -> list[LearningDocument]:
+async def list_learning_documents(
+    request: Request, profile_id: str, user_id: str
+) -> list[LearningDocument]:
     """List only the documents belonging to one profile."""
+    service = _service(request)
     try:
-        return learning_os_service.list_documents(profile_id, user_id)
+        return await anyio.to_thread.run_sync(service.list_documents, profile_id, user_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+# ------------------------------------------------------- profile-scoped ingest
+
+def _ingestion(request: Request) -> IngestionService:
+    return _require(getattr(request.app.state, "ingestion_service", None), "Ingestion service")
+
+
+@app.post("/learning/profiles/{profile_id}/ingest/text", status_code=201)
+async def ingest_profile_text(
+    request: Request,
+    profile_id: str,
+    user_id: str,
+    text: str = Form(...),
+    subject: str = Form(None),
+    chapter: str = Form(None),
+    source: str = Form("text"),
+    class_level: str = Form("12"),
+):
+    """Ingest raw text into a profile's knowledge base (chunk -> embed -> store)."""
+    service = _service(request)
+    ingestion = _ingestion(request)
+    try:
+        await anyio.to_thread.run_sync(service.get_profile, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    try:
+        return await anyio.to_thread.run_sync(
+            lambda: ingestion.ingest_text(
+                user_id=user_id, profile_id=profile_id, text=text,
+                subject=subject, chapter=chapter, source=source, class_level=class_level,
+            )
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        raise _fail(error, "Ingestion failed")
+
+
+@app.post("/learning/profiles/{profile_id}/ingest", status_code=201)
+async def ingest_profile_pdf(
+    request: Request,
+    profile_id: str,
+    user_id: str,
+    file: UploadFile = File(...),
+    subject: str = Form(None),
+    chapter: str = Form(None),
+    class_level: str = Form("12"),
+):
+    """Upload a PDF into a profile's knowledge base (extract -> chunk -> embed -> store)."""
+    service = _service(request)
+    ingestion = _ingestion(request)
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only .pdf uploads are supported")
+    try:
+        await anyio.to_thread.run_sync(service.get_profile, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+    # Persist the upload to a temp file, then ingest and clean up.
+    import tempfile
+
+    data = await file.read()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        return await anyio.to_thread.run_sync(
+            lambda: ingestion.ingest_pdf(
+                user_id=user_id, profile_id=profile_id, pdf_path=tmp_path,
+                subject=subject, chapter=chapter, source=file.filename, class_level=class_level,
+            )
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        raise _fail(error, "PDF ingestion failed")
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+@app.get("/learning/profiles/{profile_id}/retrieve")
+async def retrieve_profile_chunks(
+    request: Request, profile_id: str, user_id: str, q: str, top_k: int = 5
+):
+    """Profile-scoped vector retrieval with cross-encoder reranking."""
+    service = _service(request)
+    ingestion = _ingestion(request)
+    try:
+        await anyio.to_thread.run_sync(service.get_profile, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    try:
+        return await anyio.to_thread.run_sync(
+            lambda: ingestion.retrieve(profile_id=profile_id, query=q, top_k=top_k)
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except Exception as error:
+        raise _fail(error, "Retrieval failed")
+
+
+# ---------------------------------------------------------- document generation
+
 @app.post("/agent", response_model=DocumentResponse)
-async def generate_document(request: DocumentRequest) -> DocumentResponse:
-    """Generate a document from a natural language request.
-
-    Args:
-        request: DocumentRequest with the document request text
-
-    Returns:
-        DocumentResponse with generated document and metrics
-
-    Raises:
-        HTTPException: If document generation fails
-    """
-    if not request.request or not request.request.strip():
+async def generate_document(request: Request, body: DocumentRequest) -> DocumentResponse:
+    """Generate a document from a natural language request (custom orchestration)."""
+    if not body.request or not body.request.strip():
         raise HTTPException(status_code=400, detail="Request text cannot be empty")
 
-    logger.info(f"Received document generation request: {request.request[:100]}...")
-
+    orchestrator = _require(getattr(request.app.state, "orchestrator", None), "Document generator")
+    logger.info("Received document generation request: %s...", body.request[:100])
     try:
-        response = orchestrator.generate_document(request)
-        return response
-    except DocumentGenerationException as e:
-        logger.error(f"Document generation failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Document generation failed: {str(e)}",
-        )
-    except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Unexpected error: {str(e)}",
-        )
+        return await anyio.to_thread.run_sync(orchestrator.generate_document, body)
+    except DocumentGenerationException as error:
+        raise _fail(error, "Document generation failed")
+    except Exception as error:
+        raise _fail(error, "Document generation failed")
 
 
 @app.post("/agent/langgraph", response_model=DocumentResponse)
-async def generate_document_langgraph(request: DocumentRequest) -> DocumentResponse:
-    """Generate document using LangGraph orchestration with LangChain agents.
-
-    Uses the new LangGraph state machine with tool-calling agents for
-    autonomous multi-agent pipeline (Plan → Write → Review).
-
-    Args:
-        request: DocumentRequest with the document request text
-
-    Returns:
-        DocumentResponse with generated document and metrics
-
-    Raises:
-        HTTPException: If document generation fails
-    """
-    if not request.request or not request.request.strip():
+async def generate_document_langgraph(request: Request, body: DocumentRequest) -> DocumentResponse:
+    """Generate a document using the LangGraph state machine + agents."""
+    if not body.request or not body.request.strip():
         raise HTTPException(status_code=400, detail="Request text cannot be empty")
 
-    logger.info(f"[LangGraph] Received document generation request: {request.request[:100]}...")
-
+    langgraph = _require(
+        getattr(request.app.state, "langgraph_orchestrator", None), "LangGraph generator"
+    )
+    logger.info("[LangGraph] Received request: %s...", body.request[:100])
     try:
-        result = await langgraph_orchestrator.generate_document(
-            request=request.request,
-            metadata=request.metadata,
-        )
-
+        result = await langgraph.generate_document(request=body.request, metadata=body.metadata)
         if not result["success"]:
             raise DocumentGenerationException(result.get("error", "Unknown error"))
-
-        logger.info(f"[LangGraph] Document generated: {result['document_filename']}")
-
-        # Return response in expected format
+        logger.info("[LangGraph] Document generated: %s", result["document_filename"])
         return DocumentResponse(
             success=result["success"],
             document_filename=result["document_filename"],
-            request=request.request,
+            request=body.request,
         )
-    except DocumentGenerationException as e:
-        logger.error(f"[LangGraph] Document generation failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"LangGraph generation failed: {str(e)}",
-        )
-    except Exception as e:
-        logger.error(f"[LangGraph] Unexpected error: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"LangGraph error: {str(e)}",
-        )
+    except DocumentGenerationException as error:
+        raise _fail(error, "LangGraph generation failed")
+    except Exception as error:
+        raise _fail(error, "LangGraph generation failed")
 
 
 @app.get("/metrics")
 async def get_metrics():
-    """Get aggregated metrics (placeholder for future enhancement)."""
-    return {
-        "message": "Metrics endpoint - detailed metrics available in document responses",
-    }
+    """Get aggregated metrics (detailed metrics are in document responses)."""
+    return {"message": "Metrics endpoint - detailed metrics available in document responses"}
 
 
 @app.get("/files")
 async def list_output_files():
-    """List all generated documents in output/ folder.
-
-    Returns:
-        List of files with metadata (name, size, created date)
-    """
-    output_dir = Path("output")
-
+    """List all generated documents in the output directory."""
+    output_dir = Path(config.document_output_dir)
     if not output_dir.exists():
         return {"files": [], "message": "Output directory not found"}
 
     files = []
-    for filepath in sorted(output_dir.glob("*.docx"), key=os.path.getmtime, reverse=True):
+    for filepath in sorted(output_dir.rglob("*.docx"), key=os.path.getmtime, reverse=True):
         stat = filepath.stat()
         files.append({
             "filename": filepath.name,
@@ -380,271 +592,191 @@ async def list_output_files():
             "created": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             "download_url": f"/download/{filepath.name}",
         })
-
-    logger.info(f"Listed {len(files)} files in output directory")
-    return {
-        "files": files,
-        "total": len(files),
-        "output_directory": str(output_dir.absolute()),
-    }
+    logger.info("Listed %d files in output directory", len(files))
+    return {"files": files, "total": len(files), "output_directory": str(output_dir.absolute())}
 
 
 @app.get("/download/{filename}")
 async def download_file(filename: str):
-    """Download a generated document.
-
-    Args:
-        filename: Name of the file to download
-
-    Returns:
-        File response for download
-    """
-    # Security: prevent directory traversal
+    """Download a generated document."""
+    # Security: prevent directory traversal.
     if "/" in filename or "\\" in filename or filename.startswith("."):
         raise HTTPException(status_code=400, detail="Invalid filename")
-
-    filepath = Path("output") / filename
-
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
-
-    if not filepath.suffix == ".docx":
+    if not filename.endswith(".docx"):
         raise HTTPException(status_code=400, detail="Only .docx files can be downloaded")
 
-    logger.info(f"Downloading file: {filename}")
+    # Search the output tree (documents may live in subfolders).
+    output_dir = Path(config.document_output_dir)
+    matches = list(output_dir.rglob(filename))
+    if not matches:
+        raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+
+    logger.info("Downloading file: %s", filename)
     return FileResponse(
-        filepath,
+        matches[0],
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=filename,
     )
 
 
+# --------------------------------------------------------------------- chat
+
 @app.post("/chat/start")
-async def start_chat(request: DocumentRequest) -> ChatResponse:
-    """Start a new chat conversation for document generation.
-
-    Args:
-        request: Initial document request
-
-    Returns:
-        ChatResponse with initial questions and session_id
-    """
-    logger.info(f"Starting chat: {request.request[:100]}...")
-
+async def start_chat(request: Request, body: DocumentRequest) -> ChatResponse:
+    """Start a new chat conversation for document generation."""
+    chat_orchestrator = _require(
+        getattr(request.app.state, "chat_orchestrator", None), "Chat orchestrator"
+    )
+    logger.info("Starting chat: %s...", body.request[:100])
     try:
-        response = chat_orchestrator.start_conversation(request.request)
-
-        # Store session with UUID
-        import uuid
+        response = await anyio.to_thread.run_sync(
+            chat_orchestrator.start_conversation, body.request
+        )
         session_id = str(uuid.uuid4())
-        chat_sessions[session_id] = response.context
-
-        # Add session_id to response
+        request.app.state.chat_sessions[session_id] = response.context
         response.session_id = session_id
         return response
-    except Exception as e:
-        logger.error(f"Chat start failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as error:
+        raise _fail(error, "Chat start failed")
 
 
 @app.post("/chat/answer")
 async def answer_question(
-    session_id: str,
-    question_key: str,
-    answer: str,
+    request: Request, session_id: str, question_key: str, answer: str
 ) -> ChatResponse:
-    """Answer a clarifying question in the chat.
-
-    Args:
-        session_id: Chat session ID
-        question_key: Key of the question being answered
-        answer: User's answer
-
-    Returns:
-        ChatResponse with next action
-    """
-    logger.info(f"Processing chat answer: {question_key}={answer[:50]}")
-
-    if session_id not in chat_sessions:
+    """Answer a clarifying question in the chat."""
+    chat_orchestrator = _require(
+        getattr(request.app.state, "chat_orchestrator", None), "Chat orchestrator"
+    )
+    sessions = request.app.state.chat_sessions
+    if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Chat session not found")
-
+    logger.info("Processing chat answer: %s", question_key)
     try:
-        context = chat_sessions[session_id]
-        response = chat_orchestrator.add_answer(context, question_key, answer)
-        chat_sessions[session_id] = response.context
+        context = sessions[session_id]
+        response = await anyio.to_thread.run_sync(
+            chat_orchestrator.add_answer, context, question_key, answer
+        )
+        sessions[session_id] = response.context
         response.session_id = session_id
         return response
-    except Exception as e:
-        logger.error(f"Chat answer failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as error:
+        raise _fail(error, "Chat answer failed")
 
 
 @app.post("/chat/generate")
-async def generate_from_chat(req: GenerateFromChatRequest) -> DocumentResponse:
-    """Generate document from completed chat context using multi-agent orchestration.
+async def generate_from_chat(request: Request, body: GenerateFromChatRequest) -> DocumentResponse:
+    """Generate a document from a completed chat context."""
+    orchestrator = _require(getattr(request.app.state, "orchestrator", None), "Document generator")
+    chat_orchestrator = _require(
+        getattr(request.app.state, "chat_orchestrator", None), "Chat orchestrator"
+    )
+    logger.info("Generating document from chat: %s", body.session_id)
 
-    Uses LangChain/LangGraph agents (Planner, Writer, Reviewer) to create
-    a high-quality document from the chat conversation.
-
-    Args:
-        req: Request with session ID and context
-
-    Returns:
-        Generated document response
-    """
-    logger.info(f"Generating document from chat: {req.session_id}")
-    logger.info(f"Context ready: {req.context.is_ready_to_generate}")
-    logger.info(f"Conversation messages: {len(req.context.conversation)}")
-
-    # If context doesn't have is_ready_to_generate set, but has messages, generate anyway
-    if not req.context.is_ready_to_generate and len(req.context.conversation) == 0:
-        logger.warning(f"Chat context not ready: is_ready={req.context.is_ready_to_generate}, messages={len(req.context.conversation)}")
+    if not body.context.is_ready_to_generate and len(body.context.conversation) == 0:
         raise HTTPException(
             status_code=400,
-            detail="Chat context not ready for generation. Have a conversation first."
+            detail="Chat context not ready for generation. Have a conversation first.",
         )
-
     try:
-        # Build comprehensive prompt from chat context
-        prompt = chat_orchestrator.get_generation_prompt(req.context)
-
-        # Create document request with context
+        prompt = chat_orchestrator.get_generation_prompt(body.context)
         doc_request = DocumentRequest(
             request=prompt,
             metadata={
-                "session_id": req.session_id,
-                "chat_history": len(req.context.conversation),
+                "session_id": body.session_id,
+                "chat_history": len(body.context.conversation),
                 "source": "chat_orchestrator",
-            }
+            },
         )
-
-        logger.info(f"Calling multi-agent orchestrator for document generation...")
-
-        # Generate document using multi-agent pipeline (Planner -> Writer -> Reviewer)
-        response = orchestrator.generate_document(doc_request)
-
-        logger.info(f"Document generated successfully: {response.document_filename}")
+        response = await anyio.to_thread.run_sync(orchestrator.generate_document, doc_request)
+        logger.info("Document generated successfully: %s", response.document_filename)
         return response
-
-    except Exception as e:
-        logger.error(f"Document generation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Document generation failed: {str(e)}")
+    except Exception as error:
+        raise _fail(error, "Document generation failed")
 
 
 @app.post("/chat/refine")
-async def refine_document(req: GenerateFromChatRequest) -> DocumentResponse:
-    """Refine an already-generated document based on user feedback.
-
-    Takes a refinement request and re-generates the document with the updated requirements.
-
-    Args:
-        req: Request with session ID, context, and refinement request
-
-    Returns:
-        Updated DocumentResponse with refined document
-    """
-    logger.info(f"Refining document from chat: {req.session_id}")
-
-    if req.session_id not in chat_sessions:
+async def refine_document(request: Request, body: GenerateFromChatRequest) -> DocumentResponse:
+    """Refine an already-generated document based on user feedback."""
+    orchestrator = _require(getattr(request.app.state, "orchestrator", None), "Document generator")
+    chat_orchestrator = _require(
+        getattr(request.app.state, "chat_orchestrator", None), "Chat orchestrator"
+    )
+    sessions = request.app.state.chat_sessions
+    if body.session_id not in sessions:
         raise HTTPException(status_code=404, detail="Chat session not found")
+    if not body.refinement_request or not body.refinement_request.strip():
+        raise HTTPException(status_code=400, detail="refinement_request is required")
 
+    logger.info("Refining document from chat: %s", body.session_id)
     try:
-        context = chat_sessions[req.session_id]
+        context = sessions[body.session_id]
+        context.refinement_requests.append(body.refinement_request)
 
-        # Add refinement request to conversation context
-        if not hasattr(context, 'refinement_requests'):
-            context.refinement_requests = []
-        context.refinement_requests.append(req.refinement_request)
-
-        # Build refined prompt from chat context + refinement request
         prompt = chat_orchestrator.get_generation_prompt(context)
-        prompt += f"\n\n[REFINEMENT REQUEST]: {req.refinement_request}"
-
-        # Create document request with context
+        prompt += f"\n\n[REFINEMENT REQUEST]: {body.refinement_request}"
         doc_request = DocumentRequest(
             request=prompt,
             metadata={
-                "session_id": req.session_id,
+                "session_id": body.session_id,
                 "chat_history": len(context.conversation),
-                "refinement_request": req.refinement_request,
+                "refinement_request": body.refinement_request,
                 "source": "chat_refinement",
-            }
+            },
         )
-
-        logger.info(f"Calling orchestrator for document refinement...")
-
-        # Generate refined document using multi-agent pipeline
-        response = orchestrator.generate_document(doc_request)
-
-        logger.info(f"Document refined successfully: {response.document_filename}")
-
-        # Update session context
-        chat_sessions[req.session_id] = context
-
-        # Return response with refinement message
+        response = await anyio.to_thread.run_sync(orchestrator.generate_document, doc_request)
+        sessions[body.session_id] = context
+        logger.info("Document refined successfully: %s", response.document_filename)
         return DocumentResponse(
             success=True,
             document_filename=response.document_filename,
             request=prompt,
-            message=f"✓ Document refined based on: {req.refinement_request}"
+            message=f"Document refined based on: {body.refinement_request}",
         )
-
-    except Exception as e:
-        logger.error(f"Document refinement failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Document refinement failed: {str(e)}")
+    except Exception as error:
+        raise _fail(error, "Document refinement failed")
 
 
 @app.post("/todo")
-async def generate_todo_list(request: DocumentRequest) -> DocumentResponse:
-    """Generate a prioritized todo list.
-
-    Args:
-        request: Request with task description
-
-    Returns:
-        DOCX with todo table
-    """
-    if not request.request or not request.request.strip():
+async def generate_todo_list(request: Request, body: DocumentRequest) -> DocumentResponse:
+    """Generate a prioritized todo list."""
+    if not body.request or not body.request.strip():
         raise HTTPException(status_code=400, detail="Request cannot be empty")
 
-    logger.info(f"Generating todo list: {request.request[:100]}...")
-
+    todo_generator = _require(
+        getattr(request.app.state, "todo_generator", None), "Todo generator"
+    )
+    logger.info("Generating todo list: %s...", body.request[:100])
     try:
-        # Generate todos using LLM
-        todos = todo_generator.generate_todos(request.request)
+        return await anyio.to_thread.run_sync(_build_todo_document, todo_generator, body.request)
+    except DocumentGenerationException as error:
+        raise _fail(error, "Todo generation failed")
+    except Exception as error:
+        raise _fail(error, "Todo generation failed")
 
-        if not todos:
-            raise DocumentGenerationException("Failed to generate todos")
 
-        # Create document section
-        todo_section = todo_generator.create_todo_document_section(todos)
+def _build_todo_document(todo_generator: TodoGenerator, request_text: str) -> DocumentResponse:
+    """Synchronous todo build (run in a threadpool by the handler)."""
+    todos = todo_generator.generate_todos(request_text)
+    if not todos:
+        raise DocumentGenerationException("Failed to generate todos")
 
-        # Build DOCX
-        docx_gen = DOCXGenerator()
-        structure = DocumentStructure(
-            title="Todo List",
-            sections=[todo_section]
-        )
-        docx_gen.from_structure(structure)
+    todo_section = todo_generator.create_todo_document_section(todos)
+    docx_gen = DOCXGenerator()
+    structure = DocumentStructure(title="Todo List", sections=[todo_section])
+    docx_gen.from_structure(structure)
 
-        # Save
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"todos_{timestamp}.docx"
-        filepath = os.path.join("output", filename)
-
-        document_path = docx_gen.save(filepath)
-        logger.info(f"Todo list generated: {filename}")
-
-        return DocumentResponse(
-            success=True,
-            document_filename=filename,
-            request=request.request,
-            message=f"Generated {len(todos)} todo items"
-        )
-
-    except Exception as e:
-        logger.error(f"Todo generation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"todos_{timestamp}.docx"
+    filepath = os.path.join(config.document_output_dir, filename)
+    docx_gen.save(filepath)
+    logger.info("Todo list generated: %s", filename)
+    return DocumentResponse(
+        success=True,
+        document_filename=filename,
+        request=request_text,
+        message=f"Generated {len(todos)} todo items",
+    )
 
 
 @app.get("/")
@@ -653,27 +785,24 @@ async def root():
     return {
         "name": "Document Generation API",
         "version": "2.0.0",
-        "architecture": "LangGraph orchestration with LangChain agents",
+        "architecture": "LangGraph orchestration + Learning OS (PostgreSQL, Milvus, Ollama)",
         "endpoints": {
-            "POST /agent": "Generate document from natural language request (custom orchestration)",
-            "POST /agent/langgraph": "Generate document using LangGraph state machine + LangChain agents",
-            "POST /todo": "Generate simple priority todo list (NEW - simple endpoint)",
-            "POST /chat/start": "Start chatbot conversation with clarifying questions",
-            "POST /chat/answer": "Answer a clarifying question in chat",
+            "POST /agent": "Generate document (custom orchestration)",
+            "POST /agent/langgraph": "Generate document (LangGraph state machine)",
+            "POST /todo": "Generate a priority todo list",
+            "POST /chat/start": "Start chatbot conversation",
+            "POST /chat/answer": "Answer a clarifying question",
             "POST /chat/generate": "Generate document after chat completion",
-            "POST /chat/refine": "Refine generated document based on user feedback",
+            "POST /chat/refine": "Refine generated document",
+            "POST /learning/profiles/{id}/graph/refresh": "Rebuild the LLM knowledge graph",
             "GET /health": "Health check",
-            "GET /metrics": "Aggregated metrics",
-            "GET /files": "List all generated documents",
+            "GET /files": "List generated documents",
             "GET /download/{filename}": "Download a document",
         },
-        "todo_workflow": {
-            "simple": "POST /todo - Quick priority todo list generation"
-        }
     }
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=os.getenv("APP_HOST", "0.0.0.0"), port=int(os.getenv("APP_PORT", "8000")))

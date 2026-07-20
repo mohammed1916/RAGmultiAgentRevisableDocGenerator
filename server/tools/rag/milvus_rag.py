@@ -11,9 +11,15 @@ from typing import List, Dict, Any, Optional
 from ...base.logger import setup_logger
 
 try:
-    from pymilvus import MilvusClient
+    from pymilvus import MilvusClient, DataType
 except ImportError:
     print("WARNING: pymilvus not installed. Install with: pip install pymilvus>=3.0")
+
+# Dedicated collection for user-ingested, profile-scoped chunks. Uses an explicit
+# schema so profile_id is a filterable scalar field (Milvus only supports exact /
+# prefix matches in filter expressions, not infix JSON matching).
+PROFILE_CHUNKS_COLLECTION = "learning_profile_chunks"
+EMBEDDING_DIM = 384
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -101,6 +107,110 @@ class MilvusRAG:
                     auto_id=True,
                 )
                 logger.info(f"Created collection: {collection_name} (Class {class_level})")
+
+    def _ensure_profile_collection(self) -> None:
+        """Create the profile-scoped chunk collection with an explicit schema.
+
+        Unlike the auto-schema class collections, this collection promotes
+        ``profile_id`` (and other identity fields) to top-level scalar fields so
+        retrieval can filter with an exact ``profile_id == "..."`` expression.
+        """
+        if self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
+            return
+
+        schema = self.client.create_schema(auto_id=True, enable_dynamic_field=True)
+        schema.add_field("id", DataType.INT64, is_primary=True)
+        schema.add_field("vector", DataType.FLOAT_VECTOR, dim=EMBEDDING_DIM)
+        schema.add_field("content", DataType.VARCHAR, max_length=8192)
+        schema.add_field("profile_id", DataType.VARCHAR, max_length=64)
+        schema.add_field("user_id", DataType.VARCHAR, max_length=64)
+        schema.add_field("subject", DataType.VARCHAR, max_length=128)
+        schema.add_field("chapter", DataType.VARCHAR, max_length=128)
+        schema.add_field("source", DataType.VARCHAR, max_length=256)
+        schema.add_field("doc_id", DataType.VARCHAR, max_length=64)
+
+        index_params = self.client.prepare_index_params()
+        index_params.add_index(field_name="vector", metric_type="COSINE", index_type="AUTOINDEX")
+        self.client.create_collection(
+            collection_name=PROFILE_CHUNKS_COLLECTION,
+            schema=schema,
+            index_params=index_params,
+        )
+        logger.info("Created profile chunk collection: %s", PROFILE_CHUNKS_COLLECTION)
+
+    def add_profile_chunk(
+        self,
+        *,
+        content: str,
+        profile_id: str,
+        user_id: str,
+        doc_id: str,
+        subject: Optional[str] = None,
+        chapter: Optional[str] = None,
+        source: str = "text",
+    ) -> None:
+        """Embed and store one profile-scoped chunk."""
+        if self.mock_mode:
+            self.mock_documents[doc_id + ":" + content[:16]] = {
+                "content": content, "profile_id": profile_id, "user_id": user_id,
+                "subject": subject, "chapter": chapter, "source": source, "doc_id": doc_id,
+            }
+            return
+        self._ensure_profile_collection()
+        vector = self._get_embedding(content)
+        self.client.insert(
+            collection_name=PROFILE_CHUNKS_COLLECTION,
+            data=[{
+                "vector": vector,
+                "content": content[:8192],
+                "profile_id": profile_id,
+                "user_id": user_id,
+                "subject": (subject or "")[:128],
+                "chapter": (chapter or "")[:128],
+                "source": (source or "")[:256],
+                "doc_id": doc_id,
+            }],
+        )
+
+    def search_profile_chunks(
+        self,
+        query: str,
+        profile_id: str,
+        top_k: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Vector search restricted to a single profile via exact-match filter."""
+        if self.mock_mode:
+            return [
+                {**doc, "relevance_score": 0.0}
+                for doc in self.mock_documents.values()
+                if isinstance(doc, dict) and doc.get("profile_id") == profile_id
+            ][:top_k]
+
+        if not self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
+            return []
+        query_vector = self._get_embedding(query)
+        results = self.client.search(
+            collection_name=PROFILE_CHUNKS_COLLECTION,
+            data=[query_vector],
+            limit=top_k,
+            search_params={"metric_type": "COSINE"},
+            filter=f'profile_id == "{self._escape_filter_value(profile_id)}"',
+            output_fields=["content", "profile_id", "user_id", "subject", "chapter", "source", "doc_id"],
+        )
+        out: List[Dict[str, Any]] = []
+        if results and results[0]:
+            for hit in results[0]:
+                entity = hit.get("entity", hit)
+                out.append({
+                    "content": entity.get("content"),
+                    "profile_id": entity.get("profile_id"),
+                    "subject": entity.get("subject"),
+                    "chapter": entity.get("chapter"),
+                    "source": entity.get("source"),
+                    "doc_id": entity.get("doc_id"),
+                    "relevance_score": float(hit.get("distance", 0)),
+                })
+        return out
 
     def recreate_collections(self):
         """Drop both collections if they exist and create fresh ones.
@@ -240,6 +350,11 @@ class MilvusRAG:
         This is the primary search method for routing-based collection selection.
         Allows searching arbitrary collections without prior knowledge of structure.
 
+        For profile-scoped (identity-based) retrieval use
+        :meth:`search_profile_chunks`, which filters on an indexed ``profile_id``
+        scalar field (Milvus filter expressions do not support infix matching on
+        the JSON metadata blob).
+
         Args:
             query: Search query (will be embedded)
             collection_names: List of collection names to search
@@ -258,10 +373,10 @@ class MilvusRAG:
         # Generate semantic embedding for query
         query_vector = self._get_embedding(query)
 
-        # Build filter if needed
+        # Build filter if needed (escape user input to avoid expression injection)
         filter_expr = None
         if doc_type:
-            filter_expr = f'document_type == "{doc_type}"'
+            filter_expr = f'document_type == "{self._escape_filter_value(doc_type)}"'
 
         # Semantic search across specified collections
         all_results = []
@@ -350,10 +465,15 @@ class MilvusRAG:
                 del self.mock_documents[doc_id]
             return
 
-        self.client.delete(
-            collection_name=self.collection_name,
-            filter=f'metadata like "%{doc_id}%"',
-        )
+        safe_id = self._escape_filter_value(doc_id)
+        for collection_name in self.collection_names.values():
+            try:
+                self.client.delete(
+                    collection_name=collection_name,
+                    filter=f'metadata like "%{safe_id}%"',
+                )
+            except Exception as e:
+                logger.warning(f"Delete failed in {collection_name}: {e}")
 
     def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a specific document.
@@ -367,16 +487,31 @@ class MilvusRAG:
         if self.mock_mode:
             return self.mock_documents.get(doc_id)
 
-        results = self.client.query(
-            collection_name=self.collection_name,
-            filter=f'metadata like "%{doc_id}%"',
-            limit=1,
-            output_fields=["*"],
-        )
-
-        if results:
-            return results[0]
+        safe_id = self._escape_filter_value(doc_id)
+        for collection_name in self.collection_names.values():
+            try:
+                results = self.client.query(
+                    collection_name=collection_name,
+                    filter=f'metadata like "%{safe_id}%"',
+                    limit=1,
+                    output_fields=["*"],
+                )
+                if results:
+                    return results[0]
+            except Exception as e:
+                logger.warning(f"Query failed in {collection_name}: {e}")
         return None
+
+    @staticmethod
+    def _escape_filter_value(value: str) -> str:
+        """Escape a user-supplied value for safe use inside a Milvus filter string.
+
+        Milvus filter expressions are double-quoted strings; a stray quote or
+        backslash would let a caller inject expression syntax. Strip control
+        characters and escape backslashes and double quotes.
+        """
+        cleaned = "".join(ch for ch in str(value) if ch.isprintable())
+        return cleaned.replace("\\", "\\\\").replace('"', '\\"')
 
     def get_stats(self) -> Dict[str, Any]:
         """Get collection statistics for all collections.

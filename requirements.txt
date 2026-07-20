@@ -3,6 +3,12 @@ uvicorn==0.24.0
 pydantic==2.5.0
 python-docx==0.8.11
 requests==2.31.0
+python-dotenv==1.0.1
+python-multipart==0.0.9
+
+# Persistence (PostgreSQL)
+SQLAlchemy>=2.0,<2.1
+psycopg[binary]>=3.1,<4.0
 pytest==7.4.3
 pytest-cov==4.1.0
 pytest-mock==3.12.0

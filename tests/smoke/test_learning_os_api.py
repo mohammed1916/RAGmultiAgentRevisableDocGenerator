@@ -1,21 +1,31 @@
-"""Smoke tests for the AI Learning Operating System foundation API."""
+"""Smoke tests for the AI Learning Operating System foundation API.
 
+These tests exercise the real app through its lifespan (which initializes the
+PostgreSQL-backed service), so a database must be reachable via DATABASE_URL /
+POSTGRES_* env vars.
+"""
+
+import pytest
 from fastapi.testclient import TestClient
 
 from server.api import app
 
 
-client = TestClient(app)
+@pytest.fixture(scope="module")
+def client():
+    # The context manager runs the app lifespan, initializing app.state.
+    with TestClient(app) as test_client:
+        yield test_client
 
 
-def test_learning_specification_endpoint():
+def test_learning_specification_endpoint(client):
     response = client.get("/learning/spec")
 
     assert response.status_code == 200
     assert response.json()["phase"] == "foundation"
 
 
-def test_profile_workspace_document_flow_is_isolated():
+def test_profile_workspace_document_flow_is_isolated(client):
     profile_response = client.post(
         "/learning/profiles",
         json={
@@ -78,7 +88,7 @@ def test_profile_workspace_document_flow_is_isolated():
     assert unauthorized_response.status_code == 404
 
 
-def test_document_rejects_workspace_from_another_profile():
+def test_document_rejects_workspace_from_another_profile(client):
     first_profile = client.post(
         "/learning/profiles",
         json={"user_id": "learner-2", "name": "Mathematics"},

@@ -1,70 +1,60 @@
-"""Tests for the FastAPI endpoints."""
+"""Tests for the FastAPI endpoints.
 
-from unittest.mock import Mock, patch, MagicMock
+The app initializes its shared resources (DB-backed service, orchestrators) in a
+lifespan handler and stores them on ``app.state``. Tests therefore run the client
+as a context manager and override ``app.state`` for generation scenarios. A
+database must be reachable (DATABASE_URL / POSTGRES_* env vars).
+"""
+
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
 
+from server.api import app
 from server.base.models import (
-    DocumentRequest,
     DocumentResponse,
     ExecutionPlan,
     Task,
     QualityScore,
     PipelineMetrics,
 )
-
-
-# Mock the Orchestrator before importing the API
-@patch("server.api.routes.Orchestrator")
-def test_api_imports(mock_orchestrator):
-    """Test that API imports successfully."""
-    from server.api import app
-
-    assert app is not None
+from server.base.exceptions import DocumentGenerationException
 
 
 @pytest.fixture
 def client():
-    """Provide a test client."""
-    with patch("server.api.routes.Orchestrator") as mock_orchestrator:
-        # Configure the mock
-        mock_instance = MagicMock()
-        mock_orchestrator.return_value = mock_instance
+    with TestClient(app) as test_client:
+        yield test_client
 
-        from server.api import app
 
-        return TestClient(app)
+def test_api_imports():
+    """The app object exists and is importable."""
+    assert app is not None
 
 
 def test_health_check(client):
-    """Test health check endpoint."""
     response = client.get("/health")
-
     assert response.status_code == 200
     data = response.json()
+    # DB is required, so a passing lifespan means healthy.
     assert data["status"] == "healthy"
+    assert data["database"] == "up"
 
 
 def test_root_endpoint(client):
-    """Test root endpoint."""
     response = client.get("/")
-
     assert response.status_code == 200
-    data = response.json()
-    assert "endpoints" in data
+    assert "endpoints" in response.json()
 
 
 def test_metrics_endpoint(client):
-    """Test metrics endpoint."""
     response = client.get("/metrics")
-
     assert response.status_code == 200
 
 
-@patch("server.api.routes.orchestrator")
-def test_generate_document_success(mock_orchestrator):
-    """Test successful document generation."""
-    mock_response = DocumentResponse(
+def _sample_response() -> DocumentResponse:
+    return DocumentResponse(
         success=True,
         document_filename="test_doc.docx",
         execution_plan=ExecutionPlan(
@@ -84,25 +74,21 @@ def test_generate_document_success(mock_orchestrator):
             review_iterations=1,
         ),
         quality_scores=QualityScore(
-            relevance=5,
-            completeness=4,
-            coherence=5,
-            structure=5,
-            overall=4,
+            relevance=5, completeness=4, coherence=5, structure=5, overall=4
         ),
         message="Success",
     )
 
-    mock_orchestrator.generate_document.return_value = mock_response
 
-    from server.api import app
-
-    client = TestClient(app)
-
-    response = client.post(
-        "/agent",
-        json={"request": "Create a technical document about AI"},
-    )
+def test_generate_document_success(client):
+    mock = MagicMock()
+    mock.generate_document.return_value = _sample_response()
+    original = client.app.state.orchestrator
+    client.app.state.orchestrator = mock
+    try:
+        response = client.post("/agent", json={"request": "Create a technical document about AI"})
+    finally:
+        client.app.state.orchestrator = original
 
     assert response.status_code == 200
     data = response.json()
@@ -110,85 +96,40 @@ def test_generate_document_success(mock_orchestrator):
     assert data["document_filename"] == "test_doc.docx"
 
 
-@patch("server.api.routes.Orchestrator")
-def test_generate_document_empty_request(mock_orchestrator_class):
-    """Test document generation with empty request."""
-    mock_orchestrator_class.return_value = MagicMock()
-
-    from server.api import app
-
-    client = TestClient(app)
-
-    response = client.post(
-        "/agent",
-        json={"request": ""},
-    )
-
+def test_generate_document_empty_request(client):
+    response = client.post("/agent", json={"request": ""})
     assert response.status_code == 400
 
 
-@patch("server.api.routes.Orchestrator")
-def test_generate_document_invalid_request(mock_orchestrator_class):
-    """Test document generation with invalid request."""
-    mock_orchestrator_class.return_value = MagicMock()
-
-    from server.api import app
-
-    client = TestClient(app)
-
-    response = client.post(
-        "/agent",
-        json={"request": "   "},  # Just whitespace
-    )
-
+def test_generate_document_invalid_request(client):
+    response = client.post("/agent", json={"request": "   "})
     assert response.status_code == 400
 
 
-@patch("server.api.routes.Orchestrator")
-def test_generate_document_server_error(mock_orchestrator_class):
-    """Test document generation with server error."""
-    from server.base.exceptions import DocumentGenerationException
-
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.generate_document.side_effect = DocumentGenerationException(
-        "Test error"
-    )
-    mock_orchestrator_class.return_value = mock_orchestrator
-
-    from server.api import app
-
-    client = TestClient(app)
-
-    response = client.post(
-        "/agent",
-        json={"request": "Create a document"},
-    )
-
+def test_generate_document_server_error(client):
+    mock = MagicMock()
+    mock.generate_document.side_effect = DocumentGenerationException("Test error")
+    original = client.app.state.orchestrator
+    client.app.state.orchestrator = mock
+    try:
+        response = client.post("/agent", json={"request": "Create a document"})
+    finally:
+        client.app.state.orchestrator = original
     assert response.status_code == 500
 
 
-@patch("server.api.routes.Orchestrator")
-def test_generate_document_unexpected_error(mock_orchestrator_class):
-    """Test document generation with unexpected error."""
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.generate_document.side_effect = Exception("Unexpected error")
-    mock_orchestrator_class.return_value = mock_orchestrator
-
-    from server.api import app
-
-    client = TestClient(app)
-
-    response = client.post(
-        "/agent",
-        json={"request": "Create a document"},
-    )
-
+def test_generate_document_unexpected_error(client):
+    mock = MagicMock()
+    mock.generate_document.side_effect = Exception("Unexpected error")
+    original = client.app.state.orchestrator
+    client.app.state.orchestrator = mock
+    try:
+        response = client.post("/agent", json={"request": "Create a document"})
+    finally:
+        client.app.state.orchestrator = original
     assert response.status_code == 500
 
 
 def test_request_model_validation(client):
-    """Test request model validation."""
-    # Missing required field
     response = client.post("/agent", json={})
-
-    assert response.status_code == 422  # Unprocessable Entity
+    assert response.status_code == 422

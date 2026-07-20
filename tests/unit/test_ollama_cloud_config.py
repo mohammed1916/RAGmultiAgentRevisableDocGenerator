@@ -36,67 +36,59 @@ class TestOllamaCloudConfiguration:
 class TestOllamaClientCloudMode:
     """Test OllamaClient with cloud mode."""
 
-    @patch("server.tools.ollama_client.requests.get")
-    def test_get_headers_local_mode(self, mock_get):
-        """Test that local mode doesn't add auth headers."""
-        mock_get.return_value = MagicMock(json=lambda: {"models": []})
+    @staticmethod
+    def _session():
+        session = MagicMock()
+        resp = MagicMock()
+        resp.json.return_value = {"models": []}
+        resp.status_code = 200
+        resp.raise_for_status.return_value = None
+        session.get.return_value = resp
+        session.post.return_value = resp
+        return session
 
-        client = OllamaClient(base_url="http://localhost:11434", model="mistral")
+    def test_get_headers_local_mode(self):
+        """Test that local mode doesn't add auth headers."""
+        with patch("server.tools.llm.ollama_client._build_session", return_value=self._session()):
+            client = OllamaClient(base_url="http://localhost:11434", model="mistral")
+            client.mode = "local"
         headers = client._get_headers()
         assert "Authorization" not in headers
         assert headers["Content-Type"] == "application/json"
 
-    @patch("server.tools.ollama_client.requests.get")
-    def test_get_headers_cloud_mode(self, mock_get):
+    def test_get_headers_cloud_mode(self):
         """Test that cloud mode adds Bearer token auth header."""
-        mock_get.return_value = MagicMock(json=lambda: {"models": []})
-
-        client = OllamaClient(
-            base_url="https://api.ollama.ai",
-            model="mistral",
-            api_key="test-key-12345"
-        )
+        with patch("server.tools.llm.ollama_client._build_session", return_value=self._session()):
+            client = OllamaClient(
+                base_url="https://api.ollama.ai", model="mistral", api_key="test-key-12345"
+            )
         client.mode = "cloud"  # Force cloud mode for testing
         headers = client._get_headers()
         assert "Authorization" in headers
         assert headers["Authorization"] == "Bearer test-key-12345"
 
-    @patch("server.tools.ollama_client.requests.post")
-    @patch("server.tools.ollama_client.requests.get")
-    def test_generate_includes_auth_headers_cloud(self, mock_get, mock_post):
+    def test_generate_includes_auth_headers_cloud(self):
         """Test that generate includes auth headers in cloud mode."""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "response": "test response",
-            "eval_count": 10,
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_post.return_value = mock_response
-        mock_get.return_value = mock_response
+        session = self._session()
+        post_resp = MagicMock()
+        post_resp.json.return_value = {"response": "test response", "eval_count": 10}
+        post_resp.raise_for_status.return_value = None
+        session.post.return_value = post_resp
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(
+                base_url="https://api.ollama.ai", model="mistral", api_key="test-key-xyz"
+            )
+            client.mode = "cloud"  # Force cloud mode
+            client.generate("test prompt")
 
-        client = OllamaClient(
-            base_url="https://api.ollama.ai",
-            model="mistral",
-            api_key="test-key-xyz"
-        )
-        client.mode = "cloud"  # Force cloud mode
-        result = client.generate("test prompt")
-
-        # Verify the call included auth headers
-        call_args = mock_post.call_args
-        headers = call_args.kwargs.get("headers", {})
+        headers = session.post.call_args.kwargs.get("headers", {})
         assert "Authorization" in headers
         assert "test-key-xyz" in headers["Authorization"]
 
-    @patch("server.tools.ollama_client.requests.get")
-    def test_cloud_mode_api_key_parameter(self, mock_get):
+    def test_cloud_mode_api_key_parameter(self):
         """Test that api_key parameter is used when provided."""
-        mock_get.return_value = MagicMock(json=lambda: {"models": []})
-
-        client = OllamaClient(
-            base_url="https://api.ollama.ai",
-            api_key="cloud-key-abc123"
-        )
+        with patch("server.tools.llm.ollama_client._build_session", return_value=self._session()):
+            client = OllamaClient(base_url="https://api.ollama.ai", api_key="cloud-key-abc123")
         assert client.api_key == "cloud-key-abc123"
 
 

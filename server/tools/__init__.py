@@ -2,6 +2,7 @@
 
 # RAG and database tools
 from .rag.milvus_rag import MilvusRAG
+from .rag.reranker import Reranker
 
 # Generation and formatting tools
 from .generation.docx_generator import DOCXGenerator
@@ -21,6 +22,7 @@ from .utils.progress_extractor import ProgressExtractor
 __all__ = [
     # RAG
     "MilvusRAG",
+    "Reranker",
     # Generation
     "DOCXGenerator",
     "MarkdownFormatter",

@@ -40,13 +40,12 @@ class DocumentGenerationState(TypedDict, total=False):
     metrics: Optional[dict]
 
 
-async def plan_node(state: DocumentGenerationState) -> DocumentGenerationState:
+async def plan_node(state: DocumentGenerationState, orchestrator: "Orchestrator") -> DocumentGenerationState:
     """Plan document structure.
 
     Node that calls planner agent to create execution plan from request.
     """
     logger.info("[PLAN] Starting document planning")
-    orchestrator = Orchestrator()
 
     try:
         doc_request = DocumentRequest(
@@ -70,7 +69,7 @@ async def plan_node(state: DocumentGenerationState) -> DocumentGenerationState:
         }
 
 
-async def write_node(state: DocumentGenerationState) -> DocumentGenerationState:
+async def write_node(state: DocumentGenerationState, orchestrator: "Orchestrator") -> DocumentGenerationState:
     """Write document sections.
 
     Node that calls writer agent to generate document content based on plan.
@@ -81,8 +80,6 @@ async def write_node(state: DocumentGenerationState) -> DocumentGenerationState:
         error_msg = "No execution plan available"
         logger.error(error_msg)
         return {"error_message": error_msg}
-
-    orchestrator = Orchestrator()
 
     try:
         sections = orchestrator.writer.write_all_sections(
@@ -112,7 +109,7 @@ async def write_node(state: DocumentGenerationState) -> DocumentGenerationState:
         }
 
 
-async def review_node(state: DocumentGenerationState) -> DocumentGenerationState:
+async def review_node(state: DocumentGenerationState, orchestrator: "Orchestrator") -> DocumentGenerationState:
     """Review document quality.
 
     Node that calls reviewer agent to evaluate document and provide feedback.
@@ -123,8 +120,6 @@ async def review_node(state: DocumentGenerationState) -> DocumentGenerationState
         error_msg = "No sections to review"
         logger.error(error_msg)
         return {"error_message": error_msg}
-
-    orchestrator = Orchestrator()
 
     try:
         # Convert dict sections back to DocumentSection objects for reviewer
@@ -177,14 +172,12 @@ async def review_node(state: DocumentGenerationState) -> DocumentGenerationState
         }
 
 
-async def refine_node(state: DocumentGenerationState) -> DocumentGenerationState:
+async def refine_node(state: DocumentGenerationState, orchestrator: "Orchestrator") -> DocumentGenerationState:
     """Refine document based on review feedback.
 
     Node that revises sections based on reviewer feedback.
     """
     logger.info("[REFINE] Refining document")
-
-    orchestrator = Orchestrator()
 
     try:
         sections = [
@@ -272,10 +265,11 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
                 else:
                     generator.add_paragraph(content)
 
-        # Save document
-        os.makedirs("output/documents", exist_ok=True)
+        # Save document to the same directory /files and /download read from.
+        output_dir = config.document_output_dir
+        os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = os.path.join("output/documents", f"document_{timestamp}.docx")
+        filepath = os.path.join(output_dir, f"document_{timestamp}.docx")
         filename = generator.save(filepath)
         logger.info(f"[OK] Document generated: {filename}")
 
@@ -324,8 +318,15 @@ class LangGraphOrchestrator:
     - Message accumulation for audit trail
     """
 
-    def __init__(self):
-        """Initialize LangGraph workflow."""
+    def __init__(self, orchestrator: "Orchestrator" = None):
+        """Initialize LangGraph workflow.
+
+        Args:
+            orchestrator: A shared :class:`Orchestrator` reused by every node.
+                Passing one avoids rebuilding the LLM client, Milvus RAG and the
+                embedding model on each node call. One is created if omitted.
+        """
+        self.orchestrator = orchestrator or Orchestrator()
         self.graph = self._build_graph()
         logger.info("LangGraph orchestrator initialized")
 
@@ -335,13 +336,16 @@ class LangGraphOrchestrator:
         Creates a DAG with nodes for each stage and conditional edges
         for the review loop.
         """
+        from functools import partial
+
         graph = StateGraph(DocumentGenerationState)
 
-        # Add nodes
-        graph.add_node("plan", plan_node)
-        graph.add_node("write", write_node)
-        graph.add_node("review", review_node)
-        graph.add_node("refine", refine_node)
+        # Bind the shared orchestrator into each agent node so the LLM client,
+        # Milvus RAG and embedding model are constructed once, not per node.
+        graph.add_node("plan", partial(plan_node, orchestrator=self.orchestrator))
+        graph.add_node("write", partial(write_node, orchestrator=self.orchestrator))
+        graph.add_node("review", partial(review_node, orchestrator=self.orchestrator))
+        graph.add_node("refine", partial(refine_node, orchestrator=self.orchestrator))
         graph.add_node("generate", generate_node)
 
         # Add edges

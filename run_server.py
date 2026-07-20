@@ -1,9 +1,11 @@
 #!/usr/bin/env python
 """Start the FastAPI server with environment configuration."""
 
+import os
 import sys
 import subprocess
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 if __name__ == "__main__":
@@ -15,8 +17,15 @@ if __name__ == "__main__":
     else:
         print("[WARNING] .env file not found, using system environment variables")
 
-    # Run FastAPI server with uvicorn
-    subprocess.run(
-        [sys.executable, "-m", "uvicorn", "server.api:app", "--reload"],
-        check=False
-    )
+    host = os.getenv("APP_HOST", "0.0.0.0")
+    port = os.getenv("APP_PORT", "8000")
+    reload = os.getenv("APP_RELOAD", "false").lower() == "true"
+    workers = os.getenv("WEB_CONCURRENCY", "1")
+
+    cmd = [sys.executable, "-m", "uvicorn", "server.api:app", "--host", host, "--port", port]
+    if reload:
+        cmd.append("--reload")
+    elif workers != "1":
+        cmd += ["--workers", workers]
+
+    subprocess.run(cmd, check=False)

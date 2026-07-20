@@ -225,6 +225,7 @@ Generate the NEXT assistant response now."""
         if context.conversation:
             last_response = context.conversation[-1].content
             return "[READY]" in last_response
+        return False
 
     def get_generation_prompt(self, context: ChatContext) -> str:
         """Build generation prompt from chat context.

@@ -41,6 +41,13 @@ htmlcov/
 # Generated documents
 output/**/*.docx
 output/**/*.doc
+tests/output/*.docx
+
+# Local database files (SQLite fallback / scratch)
+data/
+*.db
+*.db-shm
+*.db-wal
 
 # Environment variables
 .env

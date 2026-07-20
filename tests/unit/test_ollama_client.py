@@ -1,138 +1,106 @@
 """Tests for the Ollama client."""
 
-import json
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, patch
 import pytest
 
 from server.tools import OllamaClient
 from server.base.exceptions import OllamaException, OllamaConnectionException
 
 
+def _mock_session(get_json=None, post_json=None, get_exc=None, post_exc=None):
+    """Build a mock requests.Session with controllable get/post behaviour."""
+    session = MagicMock()
+
+    if get_exc is not None:
+        session.get.side_effect = get_exc
+    else:
+        get_resp = MagicMock()
+        get_resp.json.return_value = get_json if get_json is not None else {"models": []}
+        get_resp.status_code = 200
+        get_resp.ok = True
+        session.get.return_value = get_resp
+
+    if post_exc is not None:
+        session.post.side_effect = post_exc
+    else:
+        post_resp = MagicMock()
+        post_resp.json.return_value = post_json or {}
+        post_resp.status_code = 200
+        session.post.return_value = post_resp
+
+    return session
+
+
 class TestOllamaClient:
-    """Test cases for OllamaClient."""
+    """Test cases for OllamaClient (local mode, mocked HTTP session)."""
 
-    @patch("server.tools.ollama_client.requests.get")
-    def test_initialization_success(self, mock_get):
-        """Test successful initialization."""
-        mock_get.return_value.json.return_value = {"models": []}
-        mock_get.return_value.status_code = 200
-
-        client = OllamaClient(
-            base_url="http://localhost:11434", model="qwen3:8b"
-        )
-
+    def test_initialization_success(self):
+        session = _mock_session()
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
         assert client.base_url == "http://localhost:11434"
         assert client.model == "qwen3:8b"
 
-    @patch("tools.ollama_client.requests.get")
-    def test_initialization_connection_failure(self, mock_get):
-        """Test initialization with connection failure."""
-        mock_get.side_effect = Exception("Connection refused")
+    def test_initialization_connection_failure(self):
+        import requests
 
-        with pytest.raises(OllamaConnectionException):
-            OllamaClient(
-                base_url="http://localhost:11434", model="qwen3:8b"
-            )
+        session = _mock_session(get_exc=requests.exceptions.ConnectionError("refused"))
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            with patch("server.tools.llm.ollama_client.config") as cfg:
+                cfg.ollama.mode = "local"
+                cfg.ollama.base_url = "http://localhost:11434"
+                cfg.ollama.model = "qwen3:8b"
+                cfg.ollama.timeout = 5
+                cfg.ollama.api_key = ""
+                with pytest.raises(OllamaConnectionException):
+                    OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
 
-    @patch("tools.ollama_client.requests.post")
-    @patch("tools.ollama_client.requests.get")
-    def test_generate_success(self, mock_get, mock_post):
-        """Test successful text generation."""
-        mock_get.return_value.json.return_value = {"models": []}
-        mock_get.return_value.status_code = 200
-
-        mock_post.return_value.json.return_value = {
-            "response": "Generated text",
-            "eval_base": 10,
-            "eval_count": 20,
-        }
-        mock_post.return_value.status_code = 200
-
-        client = OllamaClient()
-        result = client.generate("test prompt")
-
+    def test_generate_success(self):
+        session = _mock_session(post_json={"response": "Generated text", "eval_count": 20})
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
+            result = client.generate("test prompt")
         assert "response" in result
         assert result["model"] == "qwen3:8b"
         assert "latency_ms" in result
 
-    @patch("tools.ollama_client.requests.post")
-    @patch("tools.ollama_client.requests.get")
-    def test_generate_failure(self, mock_get, mock_post):
-        """Test generation failure."""
-        mock_get.return_value.json.return_value = {"models": []}
-        mock_get.return_value.status_code = 200
+    def test_generate_failure(self):
+        import requests
 
-        mock_post.side_effect = Exception("API error")
+        session = _mock_session(post_exc=requests.exceptions.RequestException("API error"))
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
+            with pytest.raises(OllamaException):
+                client.generate("test prompt")
 
-        client = OllamaClient()
-
-        with pytest.raises(OllamaException):
-            client.generate("test prompt")
-
-    @patch("tools.ollama_client.requests.post")
-    @patch("tools.ollama_client.requests.get")
-    def test_chat_success(self, mock_get, mock_post):
-        """Test successful chat."""
-        mock_get.return_value.json.return_value = {"models": []}
-        mock_get.return_value.status_code = 200
-
-        mock_post.return_value.json.return_value = {
-            "message": {"content": "Chat response"},
-            "prompt_eval_count": 15,
-            "eval_count": 25,
-        }
-        mock_post.return_value.status_code = 200
-
-        client = OllamaClient()
-        result = client.chat([{"role": "user", "content": "Hello"}])
-
+    def test_chat_success(self):
+        session = _mock_session(
+            post_json={"message": {"content": "Chat response"}, "eval_count": 25}
+        )
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
+            result = client.chat([{"role": "user", "content": "Hello"}])
         assert "message" in result
         assert "latency_ms" in result
 
-    @patch("tools.ollama_client.requests.post")
-    @patch("tools.ollama_client.requests.get")
-    def test_structured_generate_success(self, mock_get, mock_post):
-        """Test successful structured generation."""
-        mock_get.return_value.json.return_value = {"models": []}
-        mock_get.return_value.status_code = 200
-
-        mock_post.return_value.json.return_value = {
-            "response": '{"name": "test", "age": 30}',
-        }
-        mock_post.return_value.status_code = 200
-
-        client = OllamaClient()
-        result = client.structured_generate("test prompt")
-
+    def test_structured_generate_success(self):
+        session = _mock_session(post_json={"response": '{"name": "test", "age": 30}'})
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
+            result = client.structured_generate("test prompt")
         assert "parsed_response" in result
         assert result["parsed_response"]["name"] == "test"
 
-    @patch("tools.ollama_client.requests.post")
-    @patch("tools.ollama_client.requests.get")
-    def test_structured_generate_invalid_json(self, mock_get, mock_post):
-        """Test structured generation with invalid JSON."""
-        mock_get.return_value.json.return_value = {"models": []}
-        mock_get.return_value.status_code = 200
+    def test_structured_generate_invalid_json(self):
+        session = _mock_session(post_json={"response": "not valid json"})
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
+            with pytest.raises(OllamaException):
+                client.structured_generate("test prompt")
 
-        mock_post.return_value.json.return_value = {
-            "response": "not valid json",
-        }
-        mock_post.return_value.status_code = 200
-
-        client = OllamaClient()
-
-        with pytest.raises(OllamaException):
-            client.structured_generate("test prompt")
-
-    @patch("tools.ollama_client.requests.get")
-    def test_is_model_available(self, mock_get):
-        """Test model availability check."""
-        mock_get.return_value.json.return_value = {
-            "models": [{"name": "qwen3:8b"}, {"name": "llama:7b"}]
-        }
-        mock_get.return_value.status_code = 200
-
-        client = OllamaClient()
-
-        assert client.is_model_available("qwen3:8b") is True
-        assert client.is_model_available("nonexistent:8b") is False
+    def test_is_model_available(self):
+        session = _mock_session(get_json={"models": [{"name": "qwen3:8b"}, {"name": "llama:7b"}]})
+        with patch("server.tools.llm.ollama_client._build_session", return_value=session):
+            client = OllamaClient(base_url="http://localhost:11434", model="qwen3:8b")
+            assert client.is_model_available("qwen3:8b") is True
+            assert client.is_model_available("nonexistent:8b") is False

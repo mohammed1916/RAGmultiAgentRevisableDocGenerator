@@ -104,6 +104,7 @@ class DocumentResponse(BaseModel):
 
     success: bool
     document_filename: str
+    request: Optional[str] = None
     execution_plan: Optional[ExecutionPlan] = None
     assumptions: Optional[Dict[str, str]] = None
     metrics: Optional[PipelineMetrics] = None
@@ -218,6 +219,7 @@ class ChatContext(BaseModel):
     answers: Dict[str, str] = Field(default_factory=dict)  # question_key -> answer
     is_ready_to_generate: bool = False
     confidence_level: float = 0.0  # How confident we are to generate
+    refinement_requests: List[str] = Field(default_factory=list)
 
 
 class ChatResponse(BaseModel):
@@ -236,3 +238,4 @@ class GenerateFromChatRequest(BaseModel):
 
     session_id: str
     context: ChatContext
+    refinement_request: Optional[str] = None

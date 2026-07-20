@@ -3,5 +3,6 @@
 from .planner import PlannerAgent
 from .writer import WriterAgent
 from .reviewer import ReviewerAgent
+from .knowledge_graph import KnowledgeGraphAgent
 
-__all__ = ["PlannerAgent", "WriterAgent", "ReviewerAgent"]
+__all__ = ["PlannerAgent", "WriterAgent", "ReviewerAgent", "KnowledgeGraphAgent"]

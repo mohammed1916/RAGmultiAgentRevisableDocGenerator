@@ -42,6 +42,16 @@ class Orchestrator:
         self.docx_generator = DOCXGenerator()
         self.metrics = MetricsCollector()
 
+    def close(self) -> None:
+        """Release external resources (RAG/vector-DB connections)."""
+        rag = getattr(self, "rag_system", None)
+        close = getattr(rag, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception as error:  # pragma: no cover
+                logger.warning(f"Error closing RAG system: {error}")
+
     def generate_document(self, doc_request: DocumentRequest) -> DocumentResponse:
         """Generate a complete document from a request.
 

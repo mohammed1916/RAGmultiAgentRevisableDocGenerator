@@ -5,12 +5,30 @@ import time
 from typing import Any, Dict, List, Optional
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from ...config import config
 from ...base.exceptions import OllamaConnectionException, OllamaException
 from ...base.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+
+def _build_session() -> requests.Session:
+    """Create a pooled session with retry/backoff for transient failures."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=0.5,
+        status_forcelist=(502, 503, 504),
+        allowed_methods=frozenset({"GET", "POST"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
 
 class OllamaClient:
@@ -26,15 +44,17 @@ class OllamaClient:
             model: Model name to use
             api_key: API key for cloud mode
         """
-        self.base_url = base_url or config.ollama.base_url
+        self.base_url = (base_url or config.ollama.base_url).rstrip("/")
         self.model = model or config.ollama.model
         self.timeout = config.ollama.timeout
         self.mode = config.ollama.mode
         self.api_key = api_key or config.ollama.api_key
+        self.session = _build_session()
 
         logger.info(f"Ollama client initialized in {self.mode} mode")
-        if self.mode == "cloud" and self.api_key:
-            logger.info(f"Using Ollama Cloud with API key: {self.api_key[:8]}...")
+        if self.mode == "cloud":
+            # Never log the key itself, only whether one is configured.
+            logger.info("Using Ollama Cloud (API key configured: %s)", bool(self.api_key))
         elif self.mode == "local":
             logger.info(f"Using local Ollama at {self.base_url}")
 
@@ -47,7 +67,7 @@ class OllamaClient:
             if self.mode == "cloud" and self.api_key:
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
-            response = requests.get(
+            response = self.session.get(
                 f"{self.base_url}/api/tags",
                 headers=headers,
                 timeout=5
@@ -92,7 +112,7 @@ class OllamaClient:
 
         try:
             start_time = time.time()
-            response = requests.post(
+            response = self.session.post(
                 f"{self.base_url}/api/generate",
                 json=payload,
                 headers=self._get_headers(),
@@ -137,7 +157,7 @@ class OllamaClient:
 
         try:
             start_time = time.time()
-            response = requests.post(
+            response = self.session.post(
                 f"{self.base_url}/api/chat",
                 json=payload,
                 headers=self._get_headers(),
@@ -239,6 +259,12 @@ class OllamaClient:
                         f"Failed to parse structured response as JSON after {max_retries} attempts: {last_error}"
                     )
 
+        # Defensive: the loop always returns or raises above, but guard against
+        # an implicit None return if the retry logic ever changes.
+        raise OllamaException(
+            f"Structured generation exhausted retries without a result: {last_error}"
+        )
+
     def is_model_available(self, model: str = None) -> bool:
         """Check if a model is available.
 
@@ -250,7 +276,7 @@ class OllamaClient:
         """
         model = model or self.model
         try:
-            response = requests.get(
+            response = self.session.get(
                 f"{self.base_url}/api/tags",
                 headers=self._get_headers(),
                 timeout=5
