@@ -17,6 +17,16 @@ from ..agents.todo_generator import TodoGenerator
 from ..tools import DOCXGenerator
 from ..base.exceptions import DocumentGenerationException
 from ..base.logger import setup_logger
+from ..learning_os import (
+    DocumentCreate,
+    LearningDocument,
+    LearningOSService,
+    LearningProfile,
+    LearningProfileCreate,
+    ProfilePreferencesUpdate,
+    Workspace,
+    WorkspaceCreate,
+)
 
 logger = setup_logger(__name__)
 
@@ -40,6 +50,7 @@ orchestrator = None
 chat_orchestrator = ChatOrchestrator()
 langgraph_orchestrator = None
 todo_generator = TodoGenerator()
+learning_os_service = LearningOSService()
 
 # Store chat sessions
 chat_sessions = {}
@@ -81,6 +92,95 @@ async def health_check():
         "status": "healthy",
         "service": "document-generation-api",
     }
+
+
+@app.get("/learning/spec")
+async def learning_specification():
+    """Expose the currently implemented AI-LOS foundation capabilities."""
+    return {
+        "service": "ai-learning-operating-system",
+        "phase": "foundation",
+        "capabilities": [
+            "profile-isolated learning resources",
+            "profile-owned workspaces",
+            "workspace documents with retrieval metadata",
+        ],
+    }
+
+
+@app.post("/learning/profiles", response_model=LearningProfile, status_code=201)
+async def create_learning_profile(request: LearningProfileCreate) -> LearningProfile:
+    """Create an isolated learning profile for a user's study goal."""
+    return learning_os_service.create_profile(request)
+
+
+@app.get("/learning/profiles/{profile_id}", response_model=LearningProfile)
+async def get_learning_profile(profile_id: str, user_id: str) -> LearningProfile:
+    """Read a learning profile owned by the requesting user."""
+    try:
+        return learning_os_service.get_profile(profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/profiles/{profile_id}/preferences", response_model=LearningProfile)
+async def update_learning_profile_preferences(
+    profile_id: str,
+    user_id: str,
+    request: ProfilePreferencesUpdate,
+) -> LearningProfile:
+    """Merge preference changes into a profile owned by the requesting user."""
+    try:
+        return learning_os_service.update_preferences(profile_id, user_id, request)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/workspaces", response_model=Workspace, status_code=201)
+async def create_learning_workspace(request: WorkspaceCreate) -> Workspace:
+    """Create a workspace after verifying profile ownership."""
+    try:
+        return learning_os_service.create_workspace(request)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/learning/workspaces/{workspace_id}", response_model=Workspace)
+async def get_learning_workspace(workspace_id: str, user_id: str) -> Workspace:
+    """Read a workspace owned by the requesting user."""
+    try:
+        return learning_os_service.get_workspace(workspace_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/documents", response_model=LearningDocument, status_code=201)
+async def create_learning_document(request: DocumentCreate) -> LearningDocument:
+    """Store a document within its workspace and profile boundary."""
+    try:
+        return learning_os_service.create_document(request)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@app.get("/learning/documents/{document_id}", response_model=LearningDocument)
+async def get_learning_document(document_id: str, user_id: str) -> LearningDocument:
+    """Read a document owned by the requesting user."""
+    try:
+        return learning_os_service.get_document(document_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/learning/profiles/{profile_id}/documents", response_model=list[LearningDocument])
+async def list_learning_documents(profile_id: str, user_id: str) -> list[LearningDocument]:
+    """List only the documents belonging to one profile."""
+    try:
+        return learning_os_service.list_documents(profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/agent", response_model=DocumentResponse)

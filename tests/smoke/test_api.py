@@ -15,7 +15,7 @@ from server.base.models import (
 
 
 # Mock the Orchestrator before importing the API
-@patch("server.api.Orchestrator")
+@patch("server.api.routes.Orchestrator")
 def test_api_imports(mock_orchestrator):
     """Test that API imports successfully."""
     from server.api import app
@@ -26,7 +26,7 @@ def test_api_imports(mock_orchestrator):
 @pytest.fixture
 def client():
     """Provide a test client."""
-    with patch("server.api.Orchestrator") as mock_orchestrator:
+    with patch("server.api.routes.Orchestrator") as mock_orchestrator:
         # Configure the mock
         mock_instance = MagicMock()
         mock_orchestrator.return_value = mock_instance
@@ -61,12 +61,9 @@ def test_metrics_endpoint(client):
     assert response.status_code == 200
 
 
-@patch("server.api.Orchestrator")
-def test_generate_document_success(mock_orchestrator_class):
+@patch("server.api.routes.orchestrator")
+def test_generate_document_success(mock_orchestrator):
     """Test successful document generation."""
-    # Setup mock
-    mock_orchestrator = MagicMock()
-
     mock_response = DocumentResponse(
         success=True,
         document_filename="test_doc.docx",
@@ -97,7 +94,6 @@ def test_generate_document_success(mock_orchestrator_class):
     )
 
     mock_orchestrator.generate_document.return_value = mock_response
-    mock_orchestrator_class.return_value = mock_orchestrator
 
     from server.api import app
 
@@ -114,7 +110,7 @@ def test_generate_document_success(mock_orchestrator_class):
     assert data["document_filename"] == "test_doc.docx"
 
 
-@patch("server.api.Orchestrator")
+@patch("server.api.routes.Orchestrator")
 def test_generate_document_empty_request(mock_orchestrator_class):
     """Test document generation with empty request."""
     mock_orchestrator_class.return_value = MagicMock()
@@ -131,7 +127,7 @@ def test_generate_document_empty_request(mock_orchestrator_class):
     assert response.status_code == 400
 
 
-@patch("server.api.Orchestrator")
+@patch("server.api.routes.Orchestrator")
 def test_generate_document_invalid_request(mock_orchestrator_class):
     """Test document generation with invalid request."""
     mock_orchestrator_class.return_value = MagicMock()
@@ -148,7 +144,7 @@ def test_generate_document_invalid_request(mock_orchestrator_class):
     assert response.status_code == 400
 
 
-@patch("server.api.Orchestrator")
+@patch("server.api.routes.Orchestrator")
 def test_generate_document_server_error(mock_orchestrator_class):
     """Test document generation with server error."""
     from server.base.exceptions import DocumentGenerationException
@@ -171,7 +167,7 @@ def test_generate_document_server_error(mock_orchestrator_class):
     assert response.status_code == 500
 
 
-@patch("server.api.Orchestrator")
+@patch("server.api.routes.Orchestrator")
 def test_generate_document_unexpected_error(mock_orchestrator_class):
     """Test document generation with unexpected error."""
     mock_orchestrator = MagicMock()
