@@ -84,3 +84,21 @@ class LearningDocument(DocumentCreate):
     status: str = "draft"
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)
+
+
+class TaskStatusUpdate(BaseModel):
+    """A task movement within a profile's learning plan."""
+
+    status: str = Field(pattern="^(planned|in_progress|done)$")
+
+
+class FlashcardReview(BaseModel):
+    """A learner's self-assessed recall outcome."""
+
+    rating: str = Field(pattern="^(again|hard|good|easy)$")
+
+
+class StudyQuestion(BaseModel):
+    """A profile-scoped tutoring prompt."""
+
+    question: str = Field(min_length=1, max_length=4000)

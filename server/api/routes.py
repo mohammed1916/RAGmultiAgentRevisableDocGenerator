@@ -24,6 +24,9 @@ from ..learning_os import (
     LearningProfile,
     LearningProfileCreate,
     ProfilePreferencesUpdate,
+    FlashcardReview,
+    StudyQuestion,
+    TaskStatusUpdate,
     Workspace,
     WorkspaceCreate,
 )
@@ -106,6 +109,83 @@ async def learning_specification():
             "workspace documents with retrieval metadata",
         ],
     }
+
+
+@app.get("/learning/demo")
+async def load_learning_demo(user_id: str = "demo-user"):
+    """Create starter data once and return all profiles for the learning shell."""
+    profiles = learning_os_service.ensure_demo_data(user_id)
+    return [profile.model_dump(mode="json") for profile in profiles]
+
+
+@app.get("/learning/profiles")
+async def list_learning_profiles(user_id: str):
+    """List the learning profiles that belong to a user."""
+    return [profile.model_dump(mode="json") for profile in learning_os_service.list_profiles(user_id)]
+
+
+@app.get("/learning/profiles/{profile_id}/dashboard")
+async def get_learning_dashboard(profile_id: str, user_id: str):
+    """Return a profile-scoped workspace, planner, graph, and analytics snapshot."""
+    try:
+        return learning_os_service.dashboard(profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/learning/profiles/{profile_id}/search")
+async def search_learning_profile(profile_id: str, user_id: str, q: str):
+    """Search only the active profile's documents and metadata."""
+    try:
+        return learning_os_service.search(profile_id, user_id, q)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/documents/{document_id}/content", response_model=LearningDocument)
+async def update_learning_document(document_id: str, user_id: str, content: str) -> LearningDocument:
+    """Save a document revision in the active profile."""
+    try:
+        return learning_os_service.update_document(document_id, user_id, content)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/profiles/{profile_id}/tasks/{task_id}")
+async def update_learning_task(
+    profile_id: str, task_id: str, user_id: str, request: TaskStatusUpdate
+):
+    """Move a task through the profile's planner states."""
+    try:
+        return learning_os_service.update_task_status(profile_id, user_id, task_id, request.status)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/flashcards/{card_id}/review")
+async def review_learning_flashcard(
+    profile_id: str, card_id: str, user_id: str, request: FlashcardReview
+):
+    """Schedule the next review after a recall rating."""
+    try:
+        return learning_os_service.review_flashcard(profile_id, user_id, card_id, request.rating)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/tutor")
+async def ask_learning_tutor(profile_id: str, user_id: str, request: StudyQuestion):
+    """Answer a question using notes restricted to the active profile."""
+    try:
+        return learning_os_service.tutor(profile_id, user_id, request.question)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/learning/infrastructure")
+async def learning_infrastructure_status():
+    """Expose optional local AI and vector service availability."""
+    return learning_os_service.infrastructure_status()
 
 
 @app.post("/learning/profiles", response_model=LearningProfile, status_code=201)
