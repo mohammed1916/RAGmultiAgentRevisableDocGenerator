@@ -14,6 +14,11 @@ import requests
 
 from ..agents.knowledge_graph import KnowledgeGraphAgent
 from ..agents.graph_pipeline import GraphPipeline
+from ..agents.study_content import (
+    PlannerAgent as StudyPlannerAgent,
+    FlashcardAgent,
+    SubjectsBuilder,
+)
 from ..base.logger import setup_logger
 from ..config import config
 from .models import (
@@ -56,6 +61,10 @@ class LearningOSService:
         self._graph_agent = KnowledgeGraphAgent(llm_client=llm_client)
         # Multi-agent pipeline that derives the graph from ingested corpus data.
         self._graph_pipeline = GraphPipeline(llm_client=llm_client)
+        # Study-content generators (planner tree, flashcards, subjects).
+        self._planner_agent = StudyPlannerAgent(llm_client)
+        self._flashcard_agent = FlashcardAgent(llm_client)
+        self._subjects_builder = SubjectsBuilder()
         # Optional ingestion service; when present, notes are embedded into the
         # vector store on save and the corpus feeds the multi-agent graph build.
         self._ingestion = ingestion
@@ -447,6 +456,61 @@ class LearningOSService:
         """Force a rebuild of the knowledge graph for a profile."""
         self.get_profile(profile_id, user_id)
         return self._build_and_store_graph(profile_id)
+
+    def save_graph(self, profile_id: str, user_id: str, graph: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist a user-edited graph (custom roadmap layout)."""
+        self.get_profile(profile_id, user_id)
+        clean = {"nodes": graph.get("nodes", []), "edges": graph.get("edges", [])}
+        self._repo.set_collection("graph", profile_id, [clean])
+        return clean
+
+    # --------------------------------------------------- content generation
+
+    def _profile_chapters(self, profile_id: str) -> List[str]:
+        chapters = []
+        for data in self._repo.get_documents_by_profile(profile_id):
+            chapter = (data.get("chapter") or "").strip()
+            if chapter and chapter not in chapters:
+                chapters.append(chapter)
+        return chapters
+
+    def _profile_material(self, profile_id: str) -> str:
+        """Concatenate ingested chunks + document content for card generation."""
+        parts: List[str] = []
+        if self._ingestion is not None:
+            for chunk in self._ingestion.list_corpus(profile_id, limit=60):
+                content = (chunk.get("content") or "").strip()
+                if content:
+                    parts.append(content)
+        if not parts:
+            for data in self._repo.get_documents_by_profile(profile_id):
+                content = (data.get("content") or "").strip()
+                if content:
+                    parts.append(content)
+        return "\n\n".join(parts)
+
+    def generate_plan(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Generate and persist a hierarchical study plan from goal + chapters."""
+        profile = self.get_profile(profile_id, user_id)
+        goal = profile.exam or profile.name
+        tasks = self._planner_agent.run(goal, self._profile_chapters(profile_id))
+        self._repo.set_collection("tasks", profile_id, tasks)
+        return tasks
+
+    def generate_flashcards(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Generate and persist flashcards from the profile's material."""
+        self.get_profile(profile_id, user_id)
+        cards = self._flashcard_agent.run(self._profile_material(profile_id))
+        self._repo.set_collection("flashcards", profile_id, cards)
+        return cards
+
+    def generate_subjects(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Derive and persist subjects/coverage from the profile's documents."""
+        self.get_profile(profile_id, user_id)
+        documents = self._repo.get_documents_by_profile(profile_id)
+        subjects = self._subjects_builder.run(documents)
+        self._repo.set_collection("subjects", profile_id, subjects)
+        return subjects
 
     def _build_and_store_graph(self, profile_id: str) -> Dict[str, Any]:
         """Build the knowledge graph, preferring the multi-agent corpus pipeline.

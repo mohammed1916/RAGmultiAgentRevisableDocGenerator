@@ -245,6 +245,50 @@ async def refresh_learning_graph(request: Request, profile_id: str, user_id: str
         raise _fail(error, "Knowledge graph could not be generated")
 
 
+@app.put("/learning/profiles/{profile_id}/graph")
+async def save_learning_graph(request: Request, profile_id: str, user_id: str, body: dict):
+    """Persist a user-edited roadmap graph ({nodes, edges})."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.save_graph, profile_id, user_id, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/generate/plan")
+async def generate_learning_plan(request: Request, profile_id: str, user_id: str):
+    """Generate a hierarchical study plan from the profile's goal and chapters."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.generate_plan, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise _fail(error, "Study plan could not be generated")
+
+
+@app.post("/learning/profiles/{profile_id}/generate/flashcards")
+async def generate_learning_flashcards(request: Request, profile_id: str, user_id: str):
+    """Generate flashcards from the profile's notes and ingested material."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.generate_flashcards, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception as error:
+        raise _fail(error, "Flashcards could not be generated")
+
+
+@app.post("/learning/profiles/{profile_id}/generate/subjects")
+async def generate_learning_subjects(request: Request, profile_id: str, user_id: str):
+    """Derive subjects and coverage from the profile's documents."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.generate_subjects, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @app.get("/learning/profiles/{profile_id}/search")
 async def search_learning_profile(request: Request, profile_id: str, user_id: str, q: str):
     """Search only the active profile's documents and metadata."""

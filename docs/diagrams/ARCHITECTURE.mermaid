@@ -1,128 +1,133 @@
-graph TB
+flowchart TB
 
-%% =========================
-%% Presentation Layer
-%% =========================
-subgraph Presentation["Presentation Layer"]
-    UI["Chat Interface"]
-    Files["Generated .docx Files"]
+%% ==========================================================
+%% Frontend
+%% ==========================================================
+subgraph CLIENT["Frontend (React)"]
+    Profiles["Profiles<br/>Create · Switch · Delete"]
+    Workspace["Workspace<br/>Markdown · DOCX · PDF · Code"]
+    Roadmap["Knowledge Graph / Roadmap"]
+    Planner["Planner · Tutor · Search · Review"]
+    AI["AI Assistant"]
 end
 
-%% =========================
-%% API Layer
-%% =========================
-subgraph API["API Layer"]
-    ChatAPI["Chat API"]
-    FileAPI["File API"]
+API["FastAPI Backend"]
+
+CLIENT -->|REST / WebSocket| API
+API --> CLIENT
+
+%% ==========================================================
+%% Backend Services
+%% ==========================================================
+subgraph BACKEND["Backend Services"]
+
+    WorkspaceSvc["Workspace Service"]
+    Ingest["Document Ingestion"]
+    Retrieve["Retrieval Service"]
+    Rerank["Reranker"]
+    Graph["Knowledge Graph Pipeline"]
+    DocAgent["Document Orchestrator (LangGraph)"]
+    ChatAgent["Chat Orchestrator"]
+
 end
 
-%% =========================
-%% Orchestration Layer
-%% =========================
-subgraph Orch["Orchestration Layer"]
-    ChatOrch["ChatOrchestrator<br/>(Conversation Manager)"]
-    LangGraph["LangGraphOrchestrator<br/>(Plan → Write → Review → Generate)"]
+API --> WorkspaceSvc
+API --> Ingest
+API --> Retrieve
+API --> DocAgent
+API --> ChatAgent
+
+Retrieve --> Rerank
+
+%% ==========================================================
+%% PostgreSQL
+%% ==========================================================
+subgraph PG["PostgreSQL"]
+
+ProfilesDB[("Profiles")]
+WorkspaceDB[("Workspaces")]
+DocsDB[("Documents")]
+MetaDB[("Planner<br/>Flashcards<br/>Tasks<br/>Memory<br/>Events<br/>Knowledge Graph")]
+
 end
 
-%% =========================
-%% AI Agents
-%% =========================
-subgraph Agents["AI Agent Layer"]
-    Router["Router Agent<br/>(Collection Selection)"]
-    Planner["Planner Agent<br/>(Plan Generation)"]
-    Writer["Writer Agent<br/>(Content Writing<br/>& Refinement)"]
-    Reviewer["Reviewer Agent<br/>(Quality Check)"]
+WorkspaceSvc --> ProfilesDB
+WorkspaceSvc --> WorkspaceDB
+WorkspaceSvc --> DocsDB
+WorkspaceSvc --> MetaDB
+
+%% ==========================================================
+%% Document Ingestion
+%% ==========================================================
+subgraph PIPE["Document Pipeline"]
+
+Parse["Parse"]
+Chunk["Chunk"]
+Embed["Embedding Model"]
+
 end
 
-%% =========================
-%% Knowledge Layer
-%% =========================
-subgraph Knowledge["Knowledge Layer (RAG)"]
-    Embed["SentenceTransformer<br/>all-MiniLM-L6-v2"]
-    subgraph MilvusCollections["Milvus Vector Database"]
-        Col10["cbse_class_10<br/>(CBSE Class 10)"]
-        Col12["cbse_class_12<br/>(CBSE Class 12)"]
-        ColJEE["jee<br/>(JEE Main & Advanced)"]
-        ColOther["neet, gate, upsc<br/>(Future collections)"]
-    end
-    Context["Retrieved Curriculum Context<br/>(Curriculum-specific docs)"]
+Ingest --> Parse
+Parse --> Chunk
+Chunk --> Embed
+
+%% ==========================================================
+%% Vector Database
+%% ==========================================================
+subgraph VDB["Milvus"]
+
+Vectors[("learning_profile_chunks")]
+
 end
 
-%% =========================
-%% LLM Layer
-%% =========================
-subgraph LLM["LLM Layer"]
-    Ollama["Ollama"]
+Embed --> Vectors
+Retrieve -->|ANN + Metadata Filter| Vectors
+Vectors --> Rerank
+Vectors --> Graph
+
+%% ==========================================================
+%% AI Models
+%% ==========================================================
+subgraph LLM["LLM (OpenAI / Ollama / GPT-OSS)"]
+
+PlannerAgent["Planner Agent"]
+WriterAgent["Writer Agent"]
+ReviewerAgent["Reviewer Agent"]
+TutorAgent["Tutor Agent"]
+TodoAgent["Todo Agent"]
+ChatLLM["Conversation Agent"]
+
+ConceptAgent["Concept Extractor"]
+PrereqAgent["Prerequisite Mapper"]
+KnowledgeAgent["Knowledge Graph Agent"]
+
 end
 
-%% =========================
-%% Document Generation
-%% =========================
-subgraph Docs["Document Generation"]
-    Structure["DocumentStructure"]
-    Markdown["MarkdownFormatter"]
-    DOCX["DOCXGenerator"]
-    Word["Microsoft Word (.docx)"]
-end
+DocAgent --> PlannerAgent
+PlannerAgent --> WriterAgent
+WriterAgent --> ReviewerAgent
 
-%% =========================
-%% State Management Layer
-%% =========================
-subgraph StateManagement["State Management Layer"]
-    Extractor["Progress Extractor<br/>(Parse progress claims)"]
-    Validator["Progress Validator<br/>(Verify claims)"]
-    State["StudentState<br/>(Learned topics,<br/>timeline, progress)"]
-    SAP["State-Aware Planner<br/>(Respects learned topics)"]
-end
+ChatAgent --> ChatLLM
+DocAgent --> TodoAgent
+DocAgent --> TutorAgent
 
-%% =========================
-%% Flow
-%% =========================
+Graph --> ConceptAgent
+ConceptAgent --> PrereqAgent
+PrereqAgent --> KnowledgeAgent
 
-UI --> ChatAPI
+KnowledgeAgent --> MetaDB
 
-ChatAPI --> ChatOrch
-ChatAPI --> LangGraph
+%% ==========================================================
+%% Styling
+%% ==========================================================
+classDef client fill:#7451bf22,stroke:#7451bf,stroke-width:1.5px;
+classDef backend fill:#0c8fa218,stroke:#0c8fa2,stroke-width:1.5px;
+classDef storage fill:#2f6db018,stroke:#2f6db0,stroke-width:1.5px;
+classDef vector fill:#c9642a18,stroke:#c9642a,stroke-width:1.5px;
+classDef ai fill:#2f9e6b18,stroke:#2f9e6b,stroke-width:1.5px;
 
-ChatOrch --> Ollama
-
-%% State extraction and management
-LangGraph --> Extractor
-Extractor --> Validator
-Validator --> State
-State --> SAP
-
-%% Planning with state awareness + document retrieval
-SAP -->|curriculum_type + query| Router
-Router --> Embed
-Embed -->|route by curriculum| Col10
-Embed -->|route by curriculum| Col12
-Embed -->|route by curriculum| ColJEE
-Col10 -->|fetch docs| Context
-Col12 -->|fetch docs| Context
-ColJEE -->|fetch docs| Context
-Context --> Router
-
-Router -->|context + state| Planner
-
-Planner -->|plan| Writer
-
-Writer -->|write sections| Ollama
-Writer -->|refine sections| Ollama
-
-Writer --> Structure
-
-Structure --> Reviewer
-
-Reviewer -->|No issues| Markdown
-Reviewer -->|Issues found<br/>Iteration < 2| Writer
-Writer -->|with revision<br/>feedback| Reviewer
-Reviewer -->|Iteration >= 2<br/>or Approved| Markdown
-
-Markdown --> DOCX
-DOCX --> Word
-
-Word --> FileAPI
-FileAPI --> Files
-
-style StateManagement fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+class Profiles,Workspace,Roadmap,Planner,AI client;
+class API,WorkspaceSvc,Ingest,Retrieve,Rerank,Graph,DocAgent,ChatAgent,Parse,Chunk,Embed backend;
+class ProfilesDB,WorkspaceDB,DocsDB,MetaDB storage;
+class Vectors vector;
+class PlannerAgent,WriterAgent,ReviewerAgent,TutorAgent,TodoAgent,ChatLLM,ConceptAgent,PrereqAgent,KnowledgeAgent ai;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Background, Controls, Handle, Position, ReactFlow, ReactFlowProvider } from '@xyflow/react'
+import { addEdge, Background, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState } from '@xyflow/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -121,6 +121,21 @@ function EditProfileForm({ profile, onSave, onClose }) {
   </form>
 }
 
+function GenerateButton({ label, busyLabel, onGenerate, onRefresh }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function run() {
+    setBusy(true); setError('')
+    try { await onGenerate(); await onRefresh() }
+    catch (err) { setError(err.message) }
+    finally { setBusy(false) }
+  }
+  return <span className="generate-wrap">
+    <button className="rebuild-button" onClick={run} disabled={busy}><Sparkles size={14} className={busy ? 'spinning' : ''}/> {busy ? busyLabel : label}</button>
+    {error && <em className="generate-error">{error}</em>}
+  </span>
+}
+
 function App() {
   const [profiles, setProfiles] = useState([])
   const [activeId, setActiveId] = useState('')
@@ -206,40 +221,97 @@ function PageContent({ view, data, activeId, onMoveTask, onReview, onRefresh }) 
   const learner = data.profile?.learner_name
   const heading = { overview: [greeting(learner), 'Your focus is clear. Keep the next move small and specific.'], roadmap: ['Learning roadmap', 'See prerequisite paths and your current confidence.'], workspace: ['Workspace', 'Write, connect, and retrieve notes without leaving your profile.'], planner: ['Study planner', 'Move work through the day as your plan evolves.'], review: ['Review queue', 'Retrieval practice scheduled for today.'], tutor: ['Study tutor', 'Ask against the notes and concepts in this profile.'] }[view]
   return <section className="page"><div className="page-heading"><div><h1>{heading[0]}</h1><p>{heading[1]}</p></div>{view === 'overview' && <button className="primary-action" onClick={() => document.querySelector('[data-tutor-input]')?.focus()}><Sparkles size={17}/> Ask Atlas</button>}</div>
-    {view === 'overview' && <Overview data={data} />}
+    {view === 'overview' && <Overview data={data} activeId={activeId} onRefresh={onRefresh} />}
     {view === 'roadmap' && <Roadmap graph={data.graph} activeId={activeId} onRefresh={onRefresh} />}
     {view === 'workspace' && <Workspace data={data} activeId={activeId} onRefresh={onRefresh} />}
-    {view === 'planner' && <Planner tasks={data.tasks} onMoveTask={onMoveTask} />}
-    {view === 'review' && <Review cards={data.flashcards} onReview={onReview} />}
+    {view === 'planner' && <Planner tasks={data.tasks} activeId={activeId} onMoveTask={onMoveTask} onRefresh={onRefresh} />}
+    {view === 'review' && <Review cards={data.flashcards} activeId={activeId} onReview={onReview} onRefresh={onRefresh} />}
     {view === 'tutor' && <Tutor activeId={activeId} />}
   </section>
 }
 
-function Overview({ data }) {
+function Overview({ data, activeId, onRefresh }) {
   const { analytics, subjects, tasks, flashcards } = data
   return <><div className="metrics-grid"><Metric label="Study time" value={`${Math.floor(analytics.study_minutes_this_week / 60)}h ${analytics.study_minutes_this_week % 60}m`} suffix="this week"/><Metric label="Current streak" value={analytics.streak} suffix="days" accent="orange"/><Metric label="Plan progress" value={`${analytics.tasks_completed}/${analytics.task_total}`} suffix="tasks" accent="violet"/><Metric label="Reviews due" value={analytics.review_due} suffix="cards" accent="green"/></div>
   <div className="overview-grid"><section className="panel activity-panel"><div className="panel-title"><div><h2>Learning rhythm</h2><p>Focused study minutes this week</p></div><span className={`trend ${analytics.trend_percent < 0 ? 'down' : ''}`}>{analytics.trend_percent > 0 ? '+' : ''}{analytics.trend_percent ?? 0}% <small>vs last week</small></span></div><div className="chart"><ResponsiveContainer width="100%" height={230}><AreaChart data={analytics.activity}><defs><linearGradient id="study-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity=".28"/><stop offset="100%" stopColor="#06b6d4" stopOpacity="0"/></linearGradient></defs><CartesianGrid vertical={false} stroke="#e7edf4"/><XAxis dataKey="day" tickLine={false} axisLine={false}/><YAxis hide/><Tooltip/><Area type="monotone" dataKey="minutes" stroke="#0891b2" strokeWidth={3} fill="url(#study-fill)"/></AreaChart></ResponsiveContainer></div></section><section className="panel focus-panel"><div className="panel-title"><div><h2>Today's focus</h2><p>Move one meaningful task forward</p></div><button aria-label="Open planner"><Play size={17}/></button></div>{tasks.filter((task) => task.status !== 'done').slice(0, 3).map((task) => <div className="focus-task" key={task.id}><span className={`priority ${task.priority}`}/><div><b>{task.title}</b><small>{task.parent} · {task.estimate}</small></div><Clock3 size={16}/></div>)}</section></div>
-  <div className="section-row"><div><h2>Subject mastery</h2><p>Confidence blends recall, practice, and recent review.</p></div><button className="text-button">View analytics <BarChart3 size={15}/></button></div><div className="subject-grid">{subjects.map((subject) => <article className="subject-card" key={subject.name}><div className="subject-title"><span style={{ background: subject.color }}>{subject.name.slice(0, 1)}</span><div><h3>{subject.name}</h3><p>{subject.progress}% syllabus covered</p></div></div><div className="mastery"><div><span>Mastery</span><b>{Math.round(subject.mastery * 100)}%</b></div><div className="progress"><i style={{ width: `${subject.mastery * 100}%`, background: subject.color }}/></div></div></article>)}</div>
+  <div className="section-row"><div><h2>Subject mastery</h2><p>Confidence blends recall, practice, and recent review.</p></div><GenerateButton label="Generate from content" busyLabel="Deriving…" onGenerate={() => api.generateSubjects(activeId)} onRefresh={onRefresh} /></div><div className="subject-grid">{subjects.map((subject) => <article className="subject-card" key={subject.name}><div className="subject-title"><span style={{ background: subject.color }}>{subject.name.slice(0, 1)}</span><div><h3>{subject.name}</h3><p>{subject.progress}% syllabus covered</p></div></div><div className="mastery"><div><span>Mastery</span><b>{Math.round(subject.mastery * 100)}%</b></div><div className="progress"><i style={{ width: `${subject.mastery * 100}%`, background: subject.color }}/></div></div></article>)}</div>
   <section className="panel review-strip"><div><span className="panel-eyebrow">Active recall</span><h2>{flashcards.length ? `${flashcards.length} cards are ready for review` : 'Your review queue is clear'}</h2><p>{flashcards.length ? 'A short retrieval session now will keep the current-electricity chain warm.' : 'Your next cards will appear here on their scheduled date.'}</p></div><button className="primary-action"><CircleDot size={17}/> Review now</button></section></>
 }
 
+function toFlowNodes(graph) {
+  return graph.nodes.map((node, index) => ({
+    id: node.id, type: 'learning',
+    position: node.position || { x: (index % 4) * 230, y: 90 + Math.floor(index / 4) * 150 + (index % 2) * 40 },
+    data: node,
+  }))
+}
+function toFlowEdges(graph) {
+  return graph.edges.map((edge, i) => ({
+    id: edge.id || `e-${edge.source}-${edge.target}-${i}`,
+    source: edge.source, target: edge.target, label: edge.label, type: 'smoothstep',
+    markerEnd: { type: MarkerType.ArrowClosed },
+  }))
+}
+
 function Roadmap({ graph, activeId, onRefresh }) {
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState('')      // '' | 'rebuild' | 'save'
   const [error, setError] = useState('')
-  const nodes = useMemo(() => graph.nodes.map((node, index) => ({ id: node.id, type: 'learning', position: { x: index * 210, y: 120 + (index % 2) * 130 }, data: node })), [graph])
-  const edges = useMemo(() => graph.edges.map((edge) => ({ ...edge, label: edge.label, type: 'smoothstep' })), [graph])
+  const [editing, setEditing] = useState(false)
+  const [saved, setSaved] = useState(true)
+  const [nodes, setNodes, onNodesChange] = useNodesState(toFlowNodes(graph))
+  const [edges, setEdges, onEdgesChange] = useEdgesState(toFlowEdges(graph))
+
+  // Re-sync when the underlying graph changes (e.g. after a rebuild).
+  useEffect(() => { setNodes(toFlowNodes(graph)); setEdges(toFlowEdges(graph)); setSaved(true) }, [graph, setNodes, setEdges])
+
+  const onConnect = useCallback((params) => { setEdges((eds) => addEdge({ ...params, type: 'smoothstep', label: 'requires', markerEnd: { type: MarkerType.ArrowClosed } }, eds)); setSaved(false) }, [setEdges])
+  const markDirty = () => setSaved(false)
+
+  function addNode() {
+    const label = window.prompt('New concept name')
+    if (!label || !label.trim()) return
+    const id = `${label.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 40)}-${nodes.length}`
+    setNodes((ns) => [...ns, { id, type: 'learning', position: { x: 60, y: 40 }, data: { id, label: label.trim(), kind: 'concept', progress: 0 } }])
+    setSaved(false)
+  }
+
   async function rebuild() {
-    setBusy(true); setError('')
+    setBusy('rebuild'); setError('')
     try { await api.refreshGraph(activeId); await onRefresh() }
     catch (err) { setError(err.message) }
-    finally { setBusy(false) }
+    finally { setBusy('') }
   }
-  const empty = graph.nodes.length === 0
-  return <><div className="roadmap-toolbar"><span><Network size={17}/> Prerequisite learning path</span><div><button className="rebuild-button" onClick={rebuild} disabled={busy}><RefreshCw size={14} className={busy ? 'spinning' : ''}/> {busy ? 'Running agents…' : 'Rebuild from data'}</button></div></div>
+  async function save() {
+    setBusy('save'); setError('')
+    try {
+      const payload = {
+        nodes: nodes.map((n) => ({ ...n.data, id: n.id, position: n.position })),
+        edges: edges.map((e) => ({ source: e.source, target: e.target, label: e.label || 'requires' })),
+      }
+      await api.saveGraph(activeId, payload)
+      setSaved(true); setEditing(false); await onRefresh()
+    } catch (err) { setError(err.message) }
+    finally { setBusy('') }
+  }
+
+  const empty = nodes.length === 0
+  return <><div className="roadmap-toolbar"><span><Network size={17}/> Prerequisite learning path</span><div className="roadmap-tools">
+    {editing && <button onClick={addNode}><Plus size={14}/> Add node</button>}
+    <button className={editing ? 'on' : ''} onClick={() => setEditing((v) => !v)}>{editing ? 'Done editing' : 'Edit graph'}</button>
+    {editing && <button className="rebuild-button" onClick={save} disabled={busy || saved}><Check size={14}/> {busy === 'save' ? 'Saving…' : saved ? 'Saved' : 'Save layout'}</button>}
+    <button className="rebuild-button" onClick={rebuild} disabled={!!busy}><RefreshCw size={14} className={busy === 'rebuild' ? 'spinning' : ''}/> {busy === 'rebuild' ? 'Running agents…' : 'Rebuild from data'}</button>
+  </div></div>
     {error && <div className="error-banner">{error}</div>}
-    {empty ? <div className="empty-state"><Network size={28}/><h2>No graph yet</h2><p>Add data in the Workspace, then run "Rebuild from data" to derive a prerequisite graph from your material.</p></div>
-      : <div className="flow-shell"><ReactFlowProvider><ReactFlow nodes={nodes} edges={edges} nodeTypes={graphTypes} fitView fitViewOptions={{ padding: .2 }}><Background color="#dce6ed" gap={22}/><Controls showInteractive={false}/></ReactFlow></ReactFlowProvider></div>}
-    <div className="graph-legend"><span><i className="legend complete"/>Strong</span><span><i className="legend active"/>In progress</span><span><i className="legend weak"/>Needs practice</span><p><Sparkles size={15}/> Edges are derived by a multi-agent pipeline over your ingested material.</p></div></>
+    {editing && <p className="edit-hint">Drag nodes to reposition · drag between handles to connect · select a node/edge and press Delete to remove · then Save layout.</p>}
+    {empty ? <div className="empty-state"><Network size={28}/><h2>No graph yet</h2><p>Add data in the Workspace, then run "Rebuild from data" to derive a prerequisite graph — or "Edit graph" to build one by hand.</p></div>
+      : <div className="flow-shell"><ReactFlowProvider><ReactFlow
+          nodes={nodes} edges={edges} nodeTypes={graphTypes}
+          onNodesChange={(c) => { onNodesChange(c); if (c.some((x) => x.type === 'position' || x.type === 'remove')) markDirty() }}
+          onEdgesChange={(c) => { onEdgesChange(c); if (c.some((x) => x.type === 'remove')) markDirty() }}
+          onConnect={onConnect}
+          nodesDraggable={editing} nodesConnectable={editing} elementsSelectable={editing} deleteKeyCode={editing ? ['Backspace', 'Delete'] : null}
+          fitView fitViewOptions={{ padding: .2 }}><Background color="#dce6ed" gap={22}/><Controls showInteractive={false}/></ReactFlow></ReactFlowProvider></div>}
+    <div className="graph-legend"><span><i className="legend complete"/>Strong</span><span><i className="legend active"/>In progress</span><span><i className="legend weak"/>Needs practice</span><p><Sparkles size={15}/> Edges are derived by a multi-agent pipeline; edit and save to keep a custom layout.</p></div></>
 }
 
 function NewDocumentForm({ activeId, onCreated, onClose }) {
@@ -342,16 +414,18 @@ function Workspace({ data, activeId, onRefresh }) {
   return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button onClick={() => setModal('note')} aria-label="New note"><Plus size={15}/></button></div>{data.documents.map((document) => <div className={`tree-row ${document.document_id === selected.document_id ? 'selected' : ''}`} key={document.document_id}><button className="tree-select" onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button><button className="tree-delete" aria-label={`Delete ${document.title}`} onClick={() => setPendingDelete(document)}><Trash2 size={14}/></button></div>)}<button className="tree-ingest" onClick={() => setModal('ingest')}><Upload size={14}/> Add data</button></aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><aside className="context-panel"><span className="panel-eyebrow">Context</span><h3>Connected concepts</h3><button><span>Current Electricity</span><ChevronDown size={14}/></button><button><span>Ohm's Law</span><ChevronDown size={14}/></button><button><span>Kirchhoff's Laws</span><ChevronDown size={14}/></button><div className="memory-callout"><Sparkles size={16}/><p>You learn this topic best after seeing one worked numerical example.</p></div></aside>{modals}</div>
 }
 
-function Planner({ tasks, onMoveTask }) {
+function Planner({ tasks, activeId, onMoveTask, onRefresh }) {
   const columns = [['planned', 'Planned'], ['in_progress', 'In progress'], ['done', 'Done']]
-  return <div className="kanban">{columns.map(([status, label]) => <section key={status} className="kanban-column"><div className="column-title"><span>{label}</span><b>{tasks.filter((task) => task.status === status).length}</b></div>{tasks.filter((task) => task.status === status).map((task) => <article className="task-card" key={task.id}><span className={`priority ${task.priority}`}/><h3>{task.title}</h3><p>{task.parent}</p><footer><span><Clock3 size={14}/>{task.estimate}</span><select value={task.status} onChange={(event) => onMoveTask(task.id, event.target.value)} aria-label={`Move ${task.title}`}><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="done">Done</option></select></footer></article>)}</section>)}</div>
+  return <><div className="generate-bar"><span>{tasks.length ? `${tasks.length} tasks in this plan` : 'No plan yet'}</span><GenerateButton label="Generate plan" busyLabel="Planning…" onGenerate={() => api.generatePlan(activeId)} onRefresh={onRefresh} /></div>
+    {tasks.length === 0 ? <div className="empty-state"><Target size={28}/><h2>No plan yet</h2><p>Generate a study plan from this profile's goal and chapters, or add tasks manually.</p></div>
+    : <div className="kanban">{columns.map(([status, label]) => <section key={status} className="kanban-column"><div className="column-title"><span>{label}</span><b>{tasks.filter((task) => task.status === status).length}</b></div>{tasks.filter((task) => task.status === status).map((task) => <article className="task-card" key={task.id}><span className={`priority ${task.priority}`}/><h3>{task.title}</h3><p>{task.parent}</p><footer><span><Clock3 size={14}/>{task.estimate}</span><select value={task.status} onChange={(event) => onMoveTask(task.id, event.target.value)} aria-label={`Move ${task.title}`}><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="done">Done</option></select></footer></article>)}</section>)}</div>}</>
 }
 
-function Review({ cards, onReview }) {
+function Review({ cards, activeId, onReview, onRefresh }) {
   const [revealed, setRevealed] = useState(false)
   const card = cards[0]
   useEffect(() => setRevealed(false), [card?.id])
-  if (!card) return <div className="empty-state"><CircleDot size={28}/><h2>All caught up</h2><p>Your next review will appear when its schedule is due.</p></div>
+  if (!card) return <div className="empty-state"><CircleDot size={28}/><h2>No cards due</h2><p>Generate flashcards from this profile's notes, or wait for scheduled reviews.</p><span className="generate-wrap" style={{ marginTop: 14 }}><GenerateButton label="Generate flashcards" busyLabel="Writing cards…" onGenerate={() => api.generateFlashcards(activeId)} onRefresh={onRefresh} /></span></div>
   return <div className="review-layout"><section className="flashcard"><div className="card-meta"><span>Current Electricity</span><span>{cards.length} due</span></div><div className="card-face"><p>{revealed ? card.back : card.front}</p></div>{!revealed ? <button className="reveal" onClick={() => setRevealed(true)}>Show answer <ChevronDown size={17}/></button> : <div className="rating-row">{[['again','Again'],['hard','Hard'],['good','Good'],['easy','Easy']].map(([rating, label]) => <button key={rating} className={rating} onClick={() => onReview(card.id, rating)}><small>{rating === 'again' ? '1d' : rating === 'hard' ? '2d' : rating === 'good' ? '5d' : '10d'}</small>{label}</button>)}</div>}</section><aside className="review-info"><span className="panel-eyebrow">Memory state</span><h3>Designed for retention</h3><p>Each rating updates the next review interval and records the stability of this concept.</p><dl><div><dt>Stability</dt><dd>{card.stability} days</dd></div><div><dt>Difficulty</dt><dd>{card.difficulty}/10</dd></div><div><dt>Reviews</dt><dd>{card.reps}</dd></div></dl></aside></div>
 }
 

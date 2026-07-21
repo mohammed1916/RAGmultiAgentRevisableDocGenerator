@@ -227,7 +227,17 @@ class MilvusRAG:
         if doc_id is not None:
             expr += f' and doc_id == "{self._escape_filter_value(doc_id)}"'
         try:
-            self.client.delete(collection_name=PROFILE_CHUNKS_COLLECTION, filter=expr)
+            # Resolve matching primary keys, then delete by pk (Milvus deletes
+            # only support pk-in expressions on this collection schema).
+            rows = self.client.query(
+                collection_name=PROFILE_CHUNKS_COLLECTION,
+                filter=expr,
+                output_fields=["id"],
+                limit=16384,
+            )
+            ids = [row["id"] for row in rows if "id" in row]
+            if ids:
+                self.client.delete(collection_name=PROFILE_CHUNKS_COLLECTION, ids=ids)
         except Exception as e:
             logger.warning(f"Delete profile chunks failed: {e}")
 
