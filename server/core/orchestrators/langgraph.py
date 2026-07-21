@@ -254,16 +254,14 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
             if isinstance(section, dict):
                 generator.add_heading(section.get("title", ""), level=section.get("heading_level", 1))
                 content = section.get("content", "")
-                # Use markdown rendering for markdown content (tables, lists, etc)
-                if "|" in content or "*" in content or "-" in content:
+                if self._is_markdown_content(content):
                     generator.add_markdown_section(content)
                 else:
                     generator.add_paragraph(content)
             else:
                 generator.add_heading(section.title, level=section.heading_level)
                 content = section.content
-                # Use markdown rendering for markdown content (tables, lists, etc)
-                if "|" in content or "*" in content or "-" in content:
+                if self._is_markdown_content(content):
                     generator.add_markdown_section(content)
                 else:
                     generator.add_paragraph(content)
@@ -433,3 +431,13 @@ class LangGraphOrchestrator:
                 "iterations": 0,
                 "messages": 0,
             }
+
+    @staticmethod
+    def _is_markdown_content(content: str) -> bool:
+        """Detect if content has structural markdown (tables, lists) not just hyphens in prose."""
+        lines = content.split('\n')
+        for line in lines:
+            stripped = line.lstrip()
+            if stripped.startswith('|') or stripped.startswith('- ') or stripped.startswith('* '):
+                return True
+        return False

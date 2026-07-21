@@ -79,11 +79,15 @@ Generate conversational, helpful responses. Never force the user to choose betwe
         # Check if LLM determined we're ready
         is_ready = self._check_if_ready(context)
 
+        # Extract context and strip state markers from user-facing message
+        self._extract_context_from_response(response_text, context)
+        clean_response = self._strip_state_markers(response_text)
+
         # Update context.is_ready_to_generate so it's included in the response
         context.is_ready_to_generate = is_ready
 
         return ChatResponse(
-            message=response_text,
+            message=clean_response,
             session_id=None,  # Set by API
             questions=None if is_ready else [ClarifyingQuestion(
                 question="Your response:",
@@ -123,12 +127,15 @@ Generate conversational, helpful responses. Never force the user to choose betwe
         # Check if LLM indicated it's ready
         is_ready = self._check_if_ready(context)
 
+        # Strip state markers from user-facing message
+        clean_response = self._strip_state_markers(response_text)
+
         # Update context.is_ready_to_generate so it's included in the response
         context.is_ready_to_generate = is_ready
 
         if is_ready:
             return ChatResponse(
-                message=response_text,
+                message=clean_response,
                 session_id=None,
                 questions=None,
                 context=context,
@@ -137,7 +144,7 @@ Generate conversational, helpful responses. Never force the user to choose betwe
             )
         else:
             return ChatResponse(
-                message=response_text,
+                message=clean_response,
                 session_id=None,
                 questions=[ClarifyingQuestion(
                     question="Continue:",
@@ -202,15 +209,19 @@ Generate the NEXT assistant response now."""
             response: LLM-generated response
             context: Chat context to update
         """
-        # This is simple extraction based on what LLM mentioned
-        # In a real system, you might ask LLM to explicitly output JSON
         response_lower = response.lower()
 
-        # Detect if LLM mentioned subject
-        for subject in ["jee", "class 10", "class 12", "neet", "college"]:
+        subjects = ["jee", "class 10", "class 12", "neet", "college"]
+        for subject in subjects:
             if subject in response_lower and "subject" not in context.answers:
-                # LLM mentioned this subject
-                pass  # Let LLM fully control the context
+                context.answers["subject"] = subject
+                break
+
+        topics_match = response.find("topics:")
+        if topics_match != -1 and "topics" not in context.answers:
+            topics_text = response[topics_match+7:response.find("\n", topics_match)].strip()
+            if topics_text:
+                context.answers["topics"] = topics_text
 
     def _check_if_ready(self, context: ChatContext) -> bool:
         """Check if LLM indicated we have everything needed.
@@ -250,3 +261,12 @@ Based on the chat conversation:
 {chr(10).join([f'- {msg.content[:100]}' for msg in context.conversation[-6:]])}
 
 Generate a practical, day-by-day study schedule."""
+
+    @staticmethod
+    def _strip_state_markers(response: str) -> str:
+        """Remove internal state markers from LLM response before showing to user."""
+        markers = ["[GATHERING]", "[RECOMMENDING]", "[READY]"]
+        clean = response
+        for marker in markers:
+            clean = clean.replace(marker, "").strip()
+        return clean
