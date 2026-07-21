@@ -2,6 +2,7 @@
 
 import os
 import uuid
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +46,7 @@ from ..learning_os.ingestion import IngestionService
 logger = setup_logger(__name__)
 
 CHAT_SESSION_TTL_MINUTES = 30
+MODEL_LOCK = threading.Lock()
 
 
 def _cleanup_expired_chat_sessions(state) -> None:
@@ -286,10 +288,11 @@ async def set_active_model(request: Request, body: dict):
         base_url = cfg.get("local_base_url", "http://localhost:11434")
         api_key = ""
 
-    for client in clients:
-        client.set_target(mode=mode, model=model, base_url=base_url, api_key=api_key)
-    logger.info("Active model switched to %s/%s across %d clients", mode, model, len(clients))
-    return clients[0].describe()
+    with MODEL_LOCK:
+        for client in clients:
+            client.set_target(mode=mode, model=model, base_url=base_url, api_key=api_key)
+        logger.info("Active model switched to %s/%s across %d clients", mode, model, len(clients))
+        return clients[0].describe()
 
 
 # --------------------------------------------------------------- learning spec

@@ -366,7 +366,7 @@ class LearningOSService:
         tasks = self._repo.get_collection("tasks", profile_id)
         cards = self._repo.get_collection("flashcards", profile_id)
         subjects = self._repo.get_collection("subjects", profile_id)
-        due_cards = [card for card in cards if card["due"] <= date.today().isoformat()]
+        due_cards = [card for card in cards if card.get("due", date.today().isoformat()) <= date.today().isoformat()]
         completed = sum(task["status"] == "done" for task in tasks)
         analytics = self._analytics(profile_id)
         analytics["tasks_completed"] = completed
@@ -617,9 +617,9 @@ class LearningOSService:
             if card["id"] == card_id:
                 interval = intervals[rating]
                 card["due"] = (date.today() + timedelta(days=interval)).isoformat()
-                card["reps"] += 1
-                card["stability"] = round(card["stability"] + interval * 0.35, 2)
-                card["difficulty"] = round(max(1.0, card["difficulty"] + (0.3 if rating == "again" else -0.15)), 2)
+                card["reps"] = card.get("reps", 0) + 1
+                card["stability"] = round(card.get("stability", 1.0) + interval * 0.35, 2)
+                card["difficulty"] = round(max(1.0, card.get("difficulty", 5.0) + (0.3 if rating == "again" else -0.15)), 2)
                 self._repo.set_collection("flashcards", profile_id, cards)
                 self._log_event(profile_id, "review", _REVIEW_MINUTES)
                 return card
