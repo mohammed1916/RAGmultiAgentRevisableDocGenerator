@@ -10,6 +10,8 @@ Boards", "JEE"). All data — documents, ingested material, tasks, flashcards,
 subjects, the knowledge graph, and activity — is scoped to a profile, and
 retrieval is filtered by `profile_id` so profiles never leak into one another.
 
+Contributions from Codex 5.6 documented in ```CODEX_CONTRIBUTION.md```.
+
 ## Architecture
 
 ```
@@ -111,22 +113,22 @@ The full diagram lives in `docs/diagrams/ARCHITECTURE.mermaid`.
 Learning OS endpoints are namespaced under `/learning`. All are scoped by a
 `user_id` query parameter and operate within a profile.
 
-| Area | Endpoints |
-| --- | --- |
-| Profiles | `POST/GET/PATCH/DELETE /learning/profiles[...]`, `POST .../archive` |
-| Workspaces | `POST /learning/workspaces`, `GET .../{id}` |
-| Documents | `POST/GET/PATCH/DELETE /learning/documents[...]`, `GET .../{profile}/documents` |
-| Knowledge base | `POST .../ingest` (PDF), `POST .../ingest/text`, `GET .../retrieve`, `GET/DELETE .../sources[...]` |
-| Planner | `POST .../generate/plan`, `POST/PATCH/DELETE .../tasks[...]` |
-| Flashcards | `POST .../generate/flashcards`, `POST/PATCH/DELETE .../flashcards[...]`, `POST .../review` |
-| Subjects | `POST .../generate/subjects`, `POST/PATCH/DELETE .../subjects[...]` |
-| Knowledge graph | `POST .../graph/refresh`, `PUT .../graph` |
-| Tutor | `POST .../tutor` |
-| Dashboard | `GET .../dashboard`, `GET .../search` |
-| Document generation | `POST /agent`, `POST /agent/langgraph`, `POST /todo`, `POST /chat/*` |
-| Files | `GET /files`, `GET /download/{filename}` |
-| Models | `GET /models`, `GET/PUT /settings/model` |
-| Health | `GET /health` |
+| Area                | Endpoints                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| Profiles            | `POST/GET/PATCH/DELETE /learning/profiles[...]`, `POST .../archive`                                |
+| Workspaces          | `POST /learning/workspaces`, `GET .../{id}`                                                        |
+| Documents           | `POST/GET/PATCH/DELETE /learning/documents[...]`, `GET .../{profile}/documents`                    |
+| Knowledge base      | `POST .../ingest` (PDF), `POST .../ingest/text`, `GET .../retrieve`, `GET/DELETE .../sources[...]` |
+| Planner             | `POST .../generate/plan`, `POST/PATCH/DELETE .../tasks[...]`                                       |
+| Flashcards          | `POST .../generate/flashcards`, `POST/PATCH/DELETE .../flashcards[...]`, `POST .../review`         |
+| Subjects            | `POST .../generate/subjects`, `POST/PATCH/DELETE .../subjects[...]`                                |
+| Knowledge graph     | `POST .../graph/refresh`, `PUT .../graph`                                                          |
+| Tutor               | `POST .../tutor`                                                                                   |
+| Dashboard           | `GET .../dashboard`, `GET .../search`                                                              |
+| Document generation | `POST /agent`, `POST /agent/langgraph`, `POST /todo`, `POST /chat/*`                               |
+| Files               | `GET /files`, `GET /download/{filename}`                                                           |
+| Models              | `GET /models`, `GET/PUT /settings/model`                                                           |
+| Health              | `GET /health`                                                                                      |
 
 ## Project layout
 
