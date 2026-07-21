@@ -158,12 +158,25 @@ pytest tests/smoke     # API smoke tests (require PostgreSQL)
 
 See `.env.example` for the complete list. Key variables:
 
+**Core:**
 - `DATABASE_URL` / `POSTGRES_*` — PostgreSQL connection (required).
 - `OLLAMA_MODE`, `OLLAMA_MODEL`, `OLLAMA_BASE_URL`, `OLLAMA_KEY` — LLM backend.
 - `MILVUS_HOST`, `MILVUS_PORT` — vector database.
-- `CORS_ORIGINS` — comma-separated allowlist of browser origins.
 - `APP_HOST`, `APP_PORT`, `APP_RELOAD`, `WEB_CONCURRENCY` — server runtime.
+
+**Limits & Safety** (all optional, environment-configurable):
+- `MAX_PDF_UPLOAD_MB` — Max PDF file size (default: 500 MB). Increase for large textbooks.
+- `MAX_CHUNK_SIZE` — Chunk size in characters (default: 5000). Larger = fewer vectors, more context per chunk.
+- `MAX_CHUNK_OVERLAP` — Character overlap between chunks (default: 2000). Must be < chunk_size.
+- `CHAT_SESSION_TTL_MINUTES` — Chat session lifetime before eviction (default: 120). Prevents memory leak.
+- `MAX_RECALL_K` — Max vectors fetched per collection (default: 100).
+- `MAX_TOP_K` — Max results returned from search (default: 50).
+
+**Other:**
+- `CORS_ORIGINS` — comma-separated allowlist of browser origins.
 - `LANGSMITH_*` — optional tracing.
+
+All limits are validated at startup and fail fast if invalid (e.g., overlap ≥ chunk_size). Safe for local development (high defaults) and open-source deployment.
 
 ## Notes
 
