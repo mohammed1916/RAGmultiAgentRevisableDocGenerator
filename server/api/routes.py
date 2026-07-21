@@ -792,6 +792,94 @@ async def ingest_profile_pdf(
                 pass
 
 
+@app.post("/learning/profiles/{profile_id}/ingest-bulk", status_code=201)
+async def ingest_profile_pdfs_bulk(
+    request: Request,
+    profile_id: str,
+    user_id: str,
+    files: list[UploadFile] = File(...),
+    subject: str = Form(None),
+    chapter: str = Form(None),
+    class_level: str = Form("12"),
+):
+    """Upload multiple PDFs into a profile's knowledge base in bulk."""
+    service = _service(request)
+    ingestion = _ingestion(request)
+
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one file is required")
+
+    for file in files:
+        if not (file.filename or "").lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail=f"File {file.filename} is not a PDF")
+
+    try:
+        await anyio.to_thread.run_sync(service.get_profile, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+    import tempfile
+
+    MAX_PDF_SIZE = 150 * 1024 * 1024
+    results = []
+    failed = []
+
+    for file in files:
+        tmp_path = None
+        try:
+            data = await file.read()
+            if len(data) > MAX_PDF_SIZE:
+                failed.append({
+                    "filename": file.filename,
+                    "error": f"File too large (max {MAX_PDF_SIZE / 1024 / 1024:.0f}MB)"
+                })
+                continue
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+
+            sanitized_source = Path(file.filename).name if file.filename else "pdf"
+            result = await anyio.to_thread.run_sync(
+                lambda path=tmp_path, src=sanitized_source: ingestion.ingest_pdf(
+                    user_id=user_id, profile_id=profile_id, pdf_path=path,
+                    subject=subject, chapter=chapter, source=src, class_level=class_level,
+                )
+            )
+            results.append({
+                "filename": file.filename,
+                "ingested": result.get("ingested", 0),
+                "doc_id": result.get("doc_id"),
+                "status": "success"
+            })
+        except RuntimeError as error:
+            failed.append({
+                "filename": file.filename,
+                "error": f"Ingestion failed: {str(error)}"
+            })
+        except Exception as error:
+            failed.append({
+                "filename": file.filename,
+                "error": f"Error: {str(error)}"
+            })
+        finally:
+            if tmp_path:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+
+    logger.info("Bulk ingest: %d succeeded, %d failed", len(results), len(failed))
+    return {
+        "profile_id": profile_id,
+        "total_files": len(files),
+        "successful": len(results),
+        "failed": len(failed),
+        "results": results,
+        "errors": failed
+    }
+
+
 @app.get("/learning/profiles/{profile_id}/retrieve")
 async def retrieve_profile_chunks(
     request: Request, profile_id: str, user_id: str, q: str, top_k: int = 5
