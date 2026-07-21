@@ -1,5 +1,7 @@
 # Atlas Study — AI Learning Operating System
 
+https://youtu.be/_D9tN47QsNM?si=o7OQx8952X_6nu_Y
+
 A profile-scoped study platform built on a FastAPI backend, a PostgreSQL
 application store, a Milvus vector database, and Ollama-served LLMs. It combines
 retrieval-augmented generation, a multi-agent document generator, and study
