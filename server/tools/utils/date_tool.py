@@ -74,7 +74,7 @@ def date_context(deadline: Optional[str] = None) -> str:
         remaining = days_until(parsed, now)
         if remaining < 0:
             lines.append(
-                f"Deadline: {parsed.isoformat()} — this date has already passed "
+                f"Deadline: {parsed.isoformat()} - this date has already passed "
                 f"({abs(remaining)} days ago); flag this to the learner."
             )
         else:
