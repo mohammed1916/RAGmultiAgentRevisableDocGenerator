@@ -77,3 +77,13 @@
 .generate-wrap { display: inline-flex; align-items: center; gap: 8px; }
 .generate-error { color: #cd554d; font-style: normal; font-size: 11px; }
 .generate-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; padding: 10px 14px; border: 1px solid #e0e8ef; background: #fff; border-radius: 6px; color: #5f7185; font-size: 12px; }
+.model-selector { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #dbe4ed; border-radius: 5px; background: #fff; color: #5f7185; }
+.model-selector svg { color: #0c8fa2; flex: 0 0 auto; }
+.model-selector select { border: 0; outline: 0; background: transparent; color: #24364b; font-size: 12px; font-weight: 600; max-width: 150px; }
+.bar-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.card-tools { position: absolute; top: 12px; right: 34px; display: none; gap: 2px; }
+.task-card:hover .card-tools { display: inline-flex; }
+.card-tools button, .card-tools-inline button { display: grid; place-items: center; width: 24px; height: 22px; border: 0; color: #7d8da0; background: transparent; border-radius: 4px; }
+.card-tools button:hover, .card-tools-inline button:hover { color: #0b8093; background: #eef7f9; }
+.card-tools-inline { display: inline-flex; gap: 2px; margin-left: auto; }
+.subject-title { position: relative; }

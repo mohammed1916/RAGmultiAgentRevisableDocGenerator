@@ -60,6 +60,26 @@ class OllamaClient:
 
         self._verify_connection()
 
+    def set_target(self, *, mode: str = None, model: str = None, base_url: str = None, api_key: str = None) -> None:
+        """Switch the active model/mode at runtime (no restart).
+
+        Agents share this client, so updating it here re-points every subsequent
+        agent call. Only provided fields change.
+        """
+        if mode:
+            self.mode = mode
+        if model:
+            self.model = model
+        if base_url is not None:
+            self.base_url = base_url.rstrip("/")
+        if api_key is not None:
+            self.api_key = api_key
+        logger.info("Ollama target switched: mode=%s model=%s", self.mode, self.model)
+
+    def describe(self) -> Dict[str, str]:
+        """Return the active target (safe: no key value)."""
+        return {"mode": self.mode, "model": self.model, "base_url": self.base_url, "has_key": bool(self.api_key)}
+
     def _verify_connection(self) -> None:
         """Verify connection to Ollama service (local or cloud)."""
         try:

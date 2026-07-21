@@ -111,6 +111,26 @@ async def lifespan(app: FastAPI):
     except Exception as error:
         logger.warning("Ingestion service unavailable at startup: %s", error)
 
+    # --- Register every OllamaClient so the model selector can re-point them all ---
+    clients = []
+    for holder, attr in (
+        (llm_client, None),
+        (getattr(app.state.orchestrator, "ollama_client", None), None),
+        (getattr(app.state.chat_orchestrator, "llm_client", None), None),
+        (getattr(app.state.todo_generator, "llm", None), None),
+    ):
+        if holder is not None and holder not in clients:
+            clients.append(holder)
+    app.state.llm_clients = clients
+    app.state.model_config = {
+        "mode": config.ollama.mode,
+        "model": config.ollama.model,
+        "base_url": config.ollama.base_url,
+        "cloud_base_url": os.getenv("OLLAMA_CLOUD_BASE_URL", "https://ollama.com"),
+        "local_base_url": os.getenv("OLLAMA_LOCAL_BASE_URL", "http://localhost:11434"),
+        "api_key": config.ollama.api_key,
+    }
+
     try:
         yield
     finally:
@@ -188,6 +208,71 @@ async def health_check(request: Request):
         "database": "up" if db_ok else "down",
         "generation": "up" if getattr(request.app.state, "orchestrator", None) else "down",
     }
+
+
+# ------------------------------------------------------------------ model select
+
+def _list_local_models(base_url: str) -> list[str]:
+    import requests
+
+    try:
+        resp = requests.get(f"{base_url.rstrip('/')}/api/tags", timeout=3)
+        resp.raise_for_status()
+        return [m.get("name") for m in resp.json().get("models", []) if m.get("name")]
+    except requests.RequestException:
+        return []
+
+
+@app.get("/models")
+async def list_models(request: Request):
+    """List selectable models: local (via Ollama /api/tags) + configured cloud."""
+    cfg = getattr(request.app.state, "model_config", {})
+    local = await anyio.to_thread.run_sync(_list_local_models, cfg.get("local_base_url", "http://localhost:11434"))
+    options = [{"mode": "local", "model": name} for name in local]
+    # The cloud model configured at startup (e.g. gpt-oss:120b).
+    if cfg.get("api_key"):
+        options.append({"mode": "cloud", "model": cfg.get("model") if cfg.get("mode") == "cloud" else "gpt-oss:120b"})
+    active = request.app.state.llm_clients[0].describe() if getattr(request.app.state, "llm_clients", None) else {}
+    return {"options": options, "active": active}
+
+
+@app.get("/settings/model")
+async def get_active_model(request: Request):
+    """Return the currently active model target."""
+    clients = getattr(request.app.state, "llm_clients", None)
+    if not clients:
+        raise HTTPException(status_code=503, detail="No LLM client available")
+    return clients[0].describe()
+
+
+@app.put("/settings/model")
+async def set_active_model(request: Request, body: dict):
+    """Switch the active model/mode for all agents at runtime (no restart).
+
+    Body: {"mode": "local"|"cloud", "model": "<name>"}.
+    """
+    clients = getattr(request.app.state, "llm_clients", None)
+    if not clients:
+        raise HTTPException(status_code=503, detail="No LLM client available")
+    cfg = request.app.state.model_config
+    mode = body.get("mode")
+    model = body.get("model")
+    if mode not in ("local", "cloud") or not model:
+        raise HTTPException(status_code=400, detail="mode must be 'local' or 'cloud' and model is required")
+
+    if mode == "cloud":
+        base_url = cfg.get("cloud_base_url", "https://ollama.com")
+        api_key = cfg.get("api_key", "")
+        if not api_key:
+            raise HTTPException(status_code=400, detail="No cloud API key configured (set OLLAMA_KEY)")
+    else:
+        base_url = cfg.get("local_base_url", "http://localhost:11434")
+        api_key = ""
+
+    for client in clients:
+        client.set_target(mode=mode, model=model, base_url=base_url, api_key=api_key)
+    logger.info("Active model switched to %s/%s across %d clients", mode, model, len(clients))
+    return clients[0].describe()
 
 
 # --------------------------------------------------------------- learning spec
@@ -335,6 +420,96 @@ async def review_learning_flashcard(
         return await anyio.to_thread.run_sync(
             service.review_flashcard, profile_id, user_id, card_id, body.rating
         )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/tasks", status_code=201)
+async def create_learning_task(request: Request, profile_id: str, user_id: str, body: dict):
+    """Add a single task to the planner."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.create_task, profile_id, user_id, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/profiles/{profile_id}/tasks/{task_id}/edit")
+async def edit_learning_task(request: Request, profile_id: str, task_id: str, user_id: str, body: dict):
+    """Edit a task's fields (title, parent, estimate, priority, status)."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.update_task, profile_id, user_id, task_id, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/learning/profiles/{profile_id}/tasks/{task_id}", status_code=204)
+async def delete_learning_task(request: Request, profile_id: str, task_id: str, user_id: str):
+    """Delete a task from the planner."""
+    service = _service(request)
+    try:
+        await anyio.to_thread.run_sync(service.delete_task, profile_id, user_id, task_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/flashcards", status_code=201)
+async def create_learning_flashcard(request: Request, profile_id: str, user_id: str, body: dict):
+    """Add a single flashcard."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.create_flashcard, profile_id, user_id, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/profiles/{profile_id}/flashcards/{card_id}")
+async def edit_learning_flashcard(request: Request, profile_id: str, card_id: str, user_id: str, body: dict):
+    """Edit a flashcard's front/back."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.update_flashcard, profile_id, user_id, card_id, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/learning/profiles/{profile_id}/flashcards/{card_id}", status_code=204)
+async def delete_learning_flashcard(request: Request, profile_id: str, card_id: str, user_id: str):
+    """Delete a flashcard."""
+    service = _service(request)
+    try:
+        await anyio.to_thread.run_sync(service.delete_flashcard, profile_id, user_id, card_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/learning/profiles/{profile_id}/subjects", status_code=201)
+async def create_learning_subject(request: Request, profile_id: str, user_id: str, body: dict):
+    """Add a subject."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.create_subject, profile_id, user_id, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/profiles/{profile_id}/subjects/{name}")
+async def edit_learning_subject(request: Request, profile_id: str, name: str, user_id: str, body: dict):
+    """Edit a subject's coverage/mastery/color."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.update_subject, profile_id, user_id, name, body)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/learning/profiles/{profile_id}/subjects/{name}", status_code=204)
+async def delete_learning_subject(request: Request, profile_id: str, name: str, user_id: str):
+    """Delete a subject."""
+    service = _service(request)
+    try:
+        await anyio.to_thread.run_sync(service.delete_subject, profile_id, user_id, name)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

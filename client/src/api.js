@@ -51,4 +51,17 @@ export const api = {
   },
   retrieve: (profileId, query, topK = 5) => request(`/learning/profiles/${profileId}/retrieve?user_id=${userId}&q=${encodeURIComponent(query)}&top_k=${topK}`),
   infrastructure: () => request('/learning/infrastructure'),
+  // Model selector
+  listModels: () => request('/models'),
+  setModel: (mode, model) => request('/settings/model', { method: 'PUT', body: JSON.stringify({ mode, model }) }),
+  // Per-item CRUD
+  addTask: (profileId, task) => request(`/learning/profiles/${profileId}/tasks?user_id=${userId}`, { method: 'POST', body: JSON.stringify(task) }),
+  editTask: (profileId, taskId, changes) => request(`/learning/profiles/${profileId}/tasks/${taskId}/edit?user_id=${userId}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  deleteTask: (profileId, taskId) => request(`/learning/profiles/${profileId}/tasks/${taskId}?user_id=${userId}`, { method: 'DELETE' }),
+  addCard: (profileId, card) => request(`/learning/profiles/${profileId}/flashcards?user_id=${userId}`, { method: 'POST', body: JSON.stringify(card) }),
+  editCard: (profileId, cardId, changes) => request(`/learning/profiles/${profileId}/flashcards/${cardId}?user_id=${userId}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  deleteCard: (profileId, cardId) => request(`/learning/profiles/${profileId}/flashcards/${cardId}?user_id=${userId}`, { method: 'DELETE' }),
+  addSubject: (profileId, subject) => request(`/learning/profiles/${profileId}/subjects?user_id=${userId}`, { method: 'POST', body: JSON.stringify(subject) }),
+  editSubject: (profileId, name, changes) => request(`/learning/profiles/${profileId}/subjects/${encodeURIComponent(name)}?user_id=${userId}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  deleteSubject: (profileId, name) => request(`/learning/profiles/${profileId}/subjects/${encodeURIComponent(name)}?user_id=${userId}`, { method: 'DELETE' }),
 }

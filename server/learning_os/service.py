@@ -9,6 +9,7 @@ without touching the API layer.
 from datetime import date, datetime, timedelta, timezone
 import os
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 import requests
 
@@ -587,6 +588,78 @@ class LearningOSService:
                 self._log_event(profile_id, "review", _REVIEW_MINUTES)
                 return card
         raise KeyError("Flashcard not found")
+
+    # ------------------------------------------------- per-item collection CRUD
+
+    @staticmethod
+    def _next_id(prefix: str) -> str:
+        return f"{prefix}-{uuid4().hex[:8]}"
+
+    def _add_item(self, kind: str, profile_id: str, user_id: str, item: Dict[str, Any], id_prefix: str) -> Dict[str, Any]:
+        self.get_profile(profile_id, user_id)
+        items = self._repo.get_collection(kind, profile_id)
+        record = dict(item)
+        record.setdefault("id", self._next_id(id_prefix))
+        items.append(record)
+        self._repo.set_collection(kind, profile_id, items)
+        return record
+
+    def _update_item(self, kind: str, profile_id: str, user_id: str, item_id: str, changes: Dict[str, Any], match_key: str = "id") -> Dict[str, Any]:
+        self.get_profile(profile_id, user_id)
+        items = self._repo.get_collection(kind, profile_id)
+        for record in items:
+            if record.get(match_key) == item_id:
+                record.update({k: v for k, v in changes.items() if v is not None})
+                self._repo.set_collection(kind, profile_id, items)
+                return record
+        raise KeyError(f"{kind[:-1].capitalize()} not found")
+
+    def _delete_item(self, kind: str, profile_id: str, user_id: str, item_id: str, match_key: str = "id") -> None:
+        self.get_profile(profile_id, user_id)
+        items = self._repo.get_collection(kind, profile_id)
+        remaining = [r for r in items if r.get(match_key) != item_id]
+        if len(remaining) == len(items):
+            raise KeyError(f"{kind[:-1].capitalize()} not found")
+        self._repo.set_collection(kind, profile_id, remaining)
+
+    # Tasks
+    def create_task(self, profile_id: str, user_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
+        item.setdefault("status", "planned")
+        item.setdefault("priority", "medium")
+        return self._add_item("tasks", profile_id, user_id, item, "task")
+
+    def update_task(self, profile_id: str, user_id: str, task_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
+        return self._update_item("tasks", profile_id, user_id, task_id, changes)
+
+    def delete_task(self, profile_id: str, user_id: str, task_id: str) -> None:
+        self._delete_item("tasks", profile_id, user_id, task_id)
+
+    # Flashcards
+    def create_flashcard(self, profile_id: str, user_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
+        item.setdefault("due", date.today().isoformat())
+        item.setdefault("stability", 1.0)
+        item.setdefault("difficulty", 5.0)
+        item.setdefault("reps", 0)
+        return self._add_item("flashcards", profile_id, user_id, item, "card")
+
+    def update_flashcard(self, profile_id: str, user_id: str, card_id: str, changes: Dict[str, Any]) -> Dict[str, Any]:
+        return self._update_item("flashcards", profile_id, user_id, card_id, changes)
+
+    def delete_flashcard(self, profile_id: str, user_id: str, card_id: str) -> None:
+        self._delete_item("flashcards", profile_id, user_id, card_id)
+
+    # Subjects (matched by name, which is their identity)
+    def create_subject(self, profile_id: str, user_id: str, item: Dict[str, Any]) -> Dict[str, Any]:
+        item.setdefault("progress", 0)
+        item.setdefault("mastery", 0.0)
+        item.setdefault("color", "#0c8fa2")
+        return self._add_item("subjects", profile_id, user_id, item, "subject")
+
+    def update_subject(self, profile_id: str, user_id: str, name: str, changes: Dict[str, Any]) -> Dict[str, Any]:
+        return self._update_item("subjects", profile_id, user_id, name, changes, match_key="name")
+
+    def delete_subject(self, profile_id: str, user_id: str, name: str) -> None:
+        self._delete_item("subjects", profile_id, user_id, name, match_key="name")
 
     # ---------------------------------------------------------------- events
 
