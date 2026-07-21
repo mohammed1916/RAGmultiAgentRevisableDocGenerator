@@ -73,6 +73,36 @@ class IngestionService:
             class_level=class_level,
         )
 
+    def ingest_note(
+        self,
+        *,
+        user_id: str,
+        profile_id: str,
+        doc_id: str,
+        text: str,
+        subject: Optional[str] = None,
+        chapter: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Chunk and embed a workspace note under a stable doc_id (re-embeddable)."""
+        chunks = [c.strip() for c in self._text_splitter.split_text(text) if c.strip()]
+        return self._store_chunks(
+            user_id=user_id, profile_id=profile_id, chunks=chunks,
+            subject=subject, chapter=chapter, source="note", class_level="12",
+            doc_id=doc_id,
+        )
+
+    def delete_doc(self, profile_id: str, doc_id: str) -> None:
+        """Remove all vector chunks for one document/note in a profile."""
+        if not self.rag_available:
+            return
+        self._rag.delete_profile_chunks(profile_id, doc_id)
+
+    def list_corpus(self, profile_id: str, limit: int = 500):
+        """Return the profile's stored chunks for corpus-level analysis."""
+        if not self.rag_available:
+            return []
+        return self._rag.list_profile_chunks(profile_id, limit=limit)
+
     def ingest_pdf(
         self,
         *,
@@ -111,15 +141,16 @@ class IngestionService:
         chapter: Optional[str],
         source: str,
         class_level: str,
+        doc_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         if not self.rag_available:
             raise RuntimeError(
                 "Vector store (Milvus) is not available; cannot ingest documents"
             )
         if not chunks:
-            return {"ingested": 0, "doc_id": None, "source": source}
+            return {"ingested": 0, "doc_id": doc_id, "source": source}
 
-        doc_id = str(uuid.uuid4())
+        doc_id = doc_id or str(uuid.uuid4())
         for chunk in chunks:
             self._rag.add_profile_chunk(
                 content=chunk,

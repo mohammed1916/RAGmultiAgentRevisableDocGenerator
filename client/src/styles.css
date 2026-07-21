@@ -53,3 +53,19 @@
 .file-drop svg { color: #0b93a6; }
 .profile-menu-edit { border-top: 1px solid #3a4d68 !important; margin-top: 4px; color: #cdd9e8 !important; }
 .trend.down { color: #cd554d; }
+.tree-row { display: flex; align-items: center; border-radius: 4px; }
+.tree-row.selected { background: #e6f8fa; }
+.tree-select { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; padding: 8px; border: 0; color: #55677c; background: transparent; text-align: left; font-size: 11px; }
+.tree-select span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-row.selected .tree-select { color: #0d8293; }
+.tree-delete { display: none; padding: 6px 8px; border: 0; color: #b06a64; background: transparent; border-radius: 4px; }
+.tree-row:hover .tree-delete { display: inline-flex; }
+.tree-delete:hover { color: #c9463d; background: #fbecea; }
+.danger-action { padding: 10px 14px; border: 0; color: #fff; background: #cd5049; border-radius: 5px; font-size: 12px; font-weight: 700; }
+.danger-action:hover { background: #b8433d; }
+.danger-action:disabled { opacity: .6; }
+.confirm-message { margin: 0; color: #4a5a6f; font-size: 13px; line-height: 1.55; }
+.rebuild-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid #bfe3e8; color: #0b8093; background: #effbfc; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.rebuild-button:hover { background: #e2f6f8; }
+.rebuild-button:disabled { opacity: .65; }
+.spinning { animation: spin .9s linear infinite; }

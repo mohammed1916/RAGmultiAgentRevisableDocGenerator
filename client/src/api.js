@@ -28,6 +28,7 @@ export const api = {
   createWorkspace: (profileId, name, description = '') => request('/learning/workspaces', { method: 'POST', body: JSON.stringify({ user_id: userId, profile_id: profileId, name, description }) }),
   listDocuments: (profileId) => request(`/learning/profiles/${profileId}/documents?user_id=${userId}`),
   createDocument: (doc) => request('/learning/documents', { method: 'POST', body: JSON.stringify({ user_id: userId, ...doc }) }),
+  deleteDocument: (documentId) => request(`/learning/documents/${documentId}?user_id=${userId}`, { method: 'DELETE' }),
   saveDocument: (documentId, content) => request(`/learning/documents/${documentId}/content?user_id=${userId}&content=${encodeURIComponent(content)}`, { method: 'PATCH' }),
   updateTask: (profileId, taskId, status) => request(`/learning/profiles/${profileId}/tasks/${taskId}?user_id=${userId}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   review: (profileId, cardId, rating) => request(`/learning/profiles/${profileId}/flashcards/${cardId}/review?user_id=${userId}`, { method: 'POST', body: JSON.stringify({ rating }) }),

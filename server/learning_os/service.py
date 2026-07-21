@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from ..agents.knowledge_graph import KnowledgeGraphAgent
+from ..agents.graph_pipeline import GraphPipeline
 from ..base.logger import setup_logger
 from ..config import config
 from .models import (
@@ -48,10 +49,38 @@ class LearningOSService:
         self,
         repository: Optional[LearningRepository] = None,
         llm_client: Optional[Any] = None,
+        ingestion: Optional[Any] = None,
     ) -> None:
         self._repo = repository or LearningRepository()
-        # Shared LLM client (optional) used by the knowledge-graph agent.
+        # Shared LLM client (optional) used by the knowledge-graph agents.
         self._graph_agent = KnowledgeGraphAgent(llm_client=llm_client)
+        # Multi-agent pipeline that derives the graph from ingested corpus data.
+        self._graph_pipeline = GraphPipeline(llm_client=llm_client)
+        # Optional ingestion service; when present, notes are embedded into the
+        # vector store on save and the corpus feeds the multi-agent graph build.
+        self._ingestion = ingestion
+
+    def set_ingestion(self, ingestion: Any) -> None:
+        """Attach the ingestion service after construction (wired at startup)."""
+        self._ingestion = ingestion
+
+    def _embed_note(self, document: LearningDocument) -> None:
+        """(Re)embed a note's content into the profile's vector store."""
+        if self._ingestion is None or not document.content.strip():
+            return
+        try:
+            # Replace any prior chunks for this note, then embed the new content.
+            self._ingestion.delete_doc(document.profile_id, document.document_id)
+            self._ingestion.ingest_note(
+                user_id=document.user_id,
+                profile_id=document.profile_id,
+                doc_id=document.document_id,
+                text=document.content,
+                subject=document.subject,
+                chapter=document.chapter,
+            )
+        except Exception as error:
+            logger.warning("Note embedding skipped (%s)", error)
 
     # ---------------------------------------------------------------- profiles
 
@@ -155,7 +184,21 @@ class LearningOSService:
         )
         # Content changed -> the derived knowledge graph is stale.
         self._repo.delete_collection("graph", document.profile_id)
+        # Notes are also embedded so they are retrievable and feed the graph.
+        self._embed_note(document)
         return document
+
+    def delete_document(self, document_id: str, user_id: str) -> None:
+        """Delete a document from Postgres and its chunks from the vector store."""
+        document = self.get_document(document_id, user_id)  # raises if not owner
+        self._repo.delete_entity("documents", document_id)
+        if self._ingestion is not None:
+            try:
+                self._ingestion.delete_doc(document.profile_id, document_id)
+            except Exception as error:
+                logger.warning("Vector cleanup for %s skipped: %s", document_id, error)
+        # Removing content invalidates the derived graph.
+        self._repo.delete_collection("graph", document.profile_id)
 
     def get_document(self, document_id: str, user_id: str) -> LearningDocument:
         data = self._repo.get_entity("documents", document_id)
@@ -176,6 +219,7 @@ class LearningOSService:
             profile_id=document.profile_id,
         )
         self._repo.delete_collection("graph", document.profile_id)
+        self._embed_note(document)
         return document
 
     def list_documents(self, profile_id: str, user_id: str) -> List[LearningDocument]:
@@ -405,9 +449,25 @@ class LearningOSService:
         return self._build_and_store_graph(profile_id)
 
     def _build_and_store_graph(self, profile_id: str) -> Dict[str, Any]:
-        subjects = self._repo.get_collection("subjects", profile_id)
-        documents = self._repo.get_documents_by_profile(profile_id)
-        graph = self._graph_agent.build(subjects=subjects, documents=documents)
+        """Build the knowledge graph, preferring the multi-agent corpus pipeline.
+
+        If the profile has ingested chunks in the vector store, the 3-agent
+        pipeline (extract -> map -> critic) derives the graph from that real
+        material. Otherwise it falls back to the single chapter-based agent so a
+        profile with only notes/documents still gets a graph.
+        """
+        graph = {"nodes": [], "edges": []}
+        chunks = self._ingestion.list_corpus(profile_id) if self._ingestion is not None else []
+        if chunks:
+            try:
+                graph = self._graph_pipeline.build_from_corpus(chunks)
+            except Exception as error:
+                logger.warning("Corpus graph pipeline failed, falling back: %s", error)
+                graph = {"nodes": [], "edges": []}
+        if not graph.get("nodes"):
+            subjects = self._repo.get_collection("subjects", profile_id)
+            documents = self._repo.get_documents_by_profile(profile_id)
+            graph = self._graph_agent.build(subjects=subjects, documents=documents)
         # Only cache a non-empty graph so we retry derivation once content exists.
         if graph.get("nodes"):
             self._repo.set_collection("graph", profile_id, [graph])

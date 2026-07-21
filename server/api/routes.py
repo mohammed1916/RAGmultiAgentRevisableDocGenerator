@@ -104,6 +104,8 @@ async def lifespan(app: FastAPI):
     try:
         rag_system = getattr(app.state.orchestrator, "rag_system", None)
         app.state.ingestion_service = IngestionService(rag_system=rag_system)
+        # Let the learning service embed notes + feed the graph from the corpus.
+        app.state.learning_service.set_ingestion(app.state.ingestion_service)
         logger.info("Ingestion service initialized (vector store available: %s)",
                     app.state.ingestion_service.rag_available)
     except Exception as error:
@@ -417,6 +419,16 @@ async def get_learning_document(request: Request, document_id: str, user_id: str
     service = _service(request)
     try:
         return await anyio.to_thread.run_sync(service.get_document, document_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/learning/documents/{document_id}", status_code=204)
+async def delete_learning_document(request: Request, document_id: str, user_id: str):
+    """Delete a document and its vector chunks."""
+    service = _service(request)
+    try:
+        await anyio.to_thread.run_sync(service.delete_document, document_id, user_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

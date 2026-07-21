@@ -7,8 +7,8 @@ import rehypeKatex from 'rehype-katex'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   BarChart3, BookOpen, Bot, Check, ChevronDown, CircleDot, Clock3, Command,
-  FileText, GraduationCap, LayoutDashboard, Network, PanelLeft, Play, Plus, Search,
-  Send, Sparkles, Target, Upload, X, Zap,
+  FileText, GraduationCap, LayoutDashboard, Network, PanelLeft, Play, Plus, RefreshCw, Search,
+  Send, Sparkles, Target, Trash2, Upload, X, Zap,
 } from 'lucide-react'
 import { api } from './api'
 
@@ -19,6 +19,22 @@ function Modal({ title, onClose, children }) {
       {children}
     </div>
   </div>
+}
+
+function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfirm, onClose }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function confirm() {
+    setBusy(true); setError('')
+    try { await onConfirm() } catch (err) { setError(err.message); setBusy(false) }
+  }
+  return <Modal title={title} onClose={busy ? () => {} : onClose}>
+    <div className="modal-form">
+      <p className="confirm-message">{message}</p>
+      {error && <p className="modal-error">{error}</p>}
+      <div className="modal-actions"><button type="button" className="ghost" onClick={onClose} disabled={busy}>Cancel</button><button type="button" className="danger-action" onClick={confirm} disabled={busy}>{busy ? 'Deleting…' : confirmLabel}</button></div>
+    </div>
+  </Modal>
 }
 
 function NewProfileForm({ onCreate, onClose }) {
@@ -191,7 +207,7 @@ function PageContent({ view, data, activeId, onMoveTask, onReview, onRefresh }) 
   const heading = { overview: [greeting(learner), 'Your focus is clear. Keep the next move small and specific.'], roadmap: ['Learning roadmap', 'See prerequisite paths and your current confidence.'], workspace: ['Workspace', 'Write, connect, and retrieve notes without leaving your profile.'], planner: ['Study planner', 'Move work through the day as your plan evolves.'], review: ['Review queue', 'Retrieval practice scheduled for today.'], tutor: ['Study tutor', 'Ask against the notes and concepts in this profile.'] }[view]
   return <section className="page"><div className="page-heading"><div><h1>{heading[0]}</h1><p>{heading[1]}</p></div>{view === 'overview' && <button className="primary-action" onClick={() => document.querySelector('[data-tutor-input]')?.focus()}><Sparkles size={17}/> Ask Atlas</button>}</div>
     {view === 'overview' && <Overview data={data} />}
-    {view === 'roadmap' && <Roadmap graph={data.graph} />}
+    {view === 'roadmap' && <Roadmap graph={data.graph} activeId={activeId} onRefresh={onRefresh} />}
     {view === 'workspace' && <Workspace data={data} activeId={activeId} onRefresh={onRefresh} />}
     {view === 'planner' && <Planner tasks={data.tasks} onMoveTask={onMoveTask} />}
     {view === 'review' && <Review cards={data.flashcards} onReview={onReview} />}
@@ -207,10 +223,23 @@ function Overview({ data }) {
   <section className="panel review-strip"><div><span className="panel-eyebrow">Active recall</span><h2>{flashcards.length ? `${flashcards.length} cards are ready for review` : 'Your review queue is clear'}</h2><p>{flashcards.length ? 'A short retrieval session now will keep the current-electricity chain warm.' : 'Your next cards will appear here on their scheduled date.'}</p></div><button className="primary-action"><CircleDot size={17}/> Review now</button></section></>
 }
 
-function Roadmap({ graph }) {
+function Roadmap({ graph, activeId, onRefresh }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
   const nodes = useMemo(() => graph.nodes.map((node, index) => ({ id: node.id, type: 'learning', position: { x: index * 210, y: 120 + (index % 2) * 130 }, data: node })), [graph])
-  const edges = useMemo(() => graph.edges.map((edge) => ({ ...edge, animated: edge.target === 'kirchhoff', label: edge.label, type: 'smoothstep' })), [graph])
-  return <><div className="roadmap-toolbar"><span><Network size={17}/> Physics learning path</span><div><button>Auto layout</button><button>Filter weak areas</button></div></div><div className="flow-shell"><ReactFlowProvider><ReactFlow nodes={nodes} edges={edges} nodeTypes={graphTypes} fitView fitViewOptions={{ padding: .2 }}><Background color="#dce6ed" gap={22}/><Controls showInteractive={false}/></ReactFlow></ReactFlowProvider></div><div className="graph-legend"><span><i className="legend complete"/>Strong</span><span><i className="legend active"/>In progress</span><span><i className="legend weak"/>Needs practice</span><p><Sparkles size={15}/> Recommendation: practice Kirchhoff's laws after a short capacitance recall.</p></div></>
+  const edges = useMemo(() => graph.edges.map((edge) => ({ ...edge, label: edge.label, type: 'smoothstep' })), [graph])
+  async function rebuild() {
+    setBusy(true); setError('')
+    try { await api.refreshGraph(activeId); await onRefresh() }
+    catch (err) { setError(err.message) }
+    finally { setBusy(false) }
+  }
+  const empty = graph.nodes.length === 0
+  return <><div className="roadmap-toolbar"><span><Network size={17}/> Prerequisite learning path</span><div><button className="rebuild-button" onClick={rebuild} disabled={busy}><RefreshCw size={14} className={busy ? 'spinning' : ''}/> {busy ? 'Running agents…' : 'Rebuild from data'}</button></div></div>
+    {error && <div className="error-banner">{error}</div>}
+    {empty ? <div className="empty-state"><Network size={28}/><h2>No graph yet</h2><p>Add data in the Workspace, then run "Rebuild from data" to derive a prerequisite graph from your material.</p></div>
+      : <div className="flow-shell"><ReactFlowProvider><ReactFlow nodes={nodes} edges={edges} nodeTypes={graphTypes} fitView fitViewOptions={{ padding: .2 }}><Background color="#dce6ed" gap={22}/><Controls showInteractive={false}/></ReactFlow></ReactFlowProvider></div>}
+    <div className="graph-legend"><span><i className="legend complete"/>Strong</span><span><i className="legend active"/>In progress</span><span><i className="legend weak"/>Needs practice</span><p><Sparkles size={15}/> Edges are derived by a multi-agent pipeline over your ingested material.</p></div></>
 }
 
 function NewDocumentForm({ activeId, onCreated, onClose }) {
@@ -287,9 +316,16 @@ function Workspace({ data, activeId, onRefresh }) {
   const [content, setContent] = useState(selected?.content || '')
   const [saved, setSaved] = useState(true)
   const [modal, setModal] = useState(null) // 'note' | 'ingest' | null
+  const [pendingDelete, setPendingDelete] = useState(null)
   useEffect(() => { setContent(selected?.content || ''); setSaved(true) }, [selectedId])
   async function save() { if (!selected) return; await api.saveDocument(selected.document_id, content); setSaved(true); onRefresh() }
   async function afterCreate(doc) { setModal(null); await onRefresh(); if (doc?.document_id) setSelectedId(doc.document_id) }
+  async function confirmDelete() {
+    await api.deleteDocument(pendingDelete.document_id)
+    if (pendingDelete.document_id === selectedId) setSelectedId(undefined)
+    setPendingDelete(null)
+    await onRefresh()
+  }
 
   const toolbar = <div className="workspace-actions">
     <button className="chip-button" onClick={() => setModal('note')}><Plus size={14} /> New note</button>
@@ -299,10 +335,11 @@ function Workspace({ data, activeId, onRefresh }) {
   const modals = <>
     {modal === 'note' && <Modal title="New note (collection)" onClose={() => setModal(null)}><NewDocumentForm activeId={activeId} onCreated={afterCreate} onClose={() => setModal(null)} /></Modal>}
     {modal === 'ingest' && <Modal title="Add data to knowledge base" onClose={() => setModal(null)}><IngestForm activeId={activeId} onDone={onRefresh} onClose={() => setModal(null)} /></Modal>}
+    {pendingDelete && <ConfirmDialog title="Delete note" message={`Delete "${pendingDelete.title}"? This removes the note and its embedded chunks from the knowledge base. This cannot be undone.`} onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />}
   </>
 
   if (!selected) return <><div className="empty-state"><BookOpen size={28}/><h2>No notes yet</h2><p>Create a note or ingest a PDF to start building this profile's knowledge base.</p>{toolbar}</div>{modals}</>
-  return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button onClick={() => setModal('note')} aria-label="New note"><Plus size={15}/></button></div>{data.documents.map((document) => <button className={document.document_id === selected.document_id ? 'selected' : ''} key={document.document_id} onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button>)}<button className="tree-ingest" onClick={() => setModal('ingest')}><Upload size={14}/> Add data</button></aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><aside className="context-panel"><span className="panel-eyebrow">Context</span><h3>Connected concepts</h3><button><span>Current Electricity</span><ChevronDown size={14}/></button><button><span>Ohm's Law</span><ChevronDown size={14}/></button><button><span>Kirchhoff's Laws</span><ChevronDown size={14}/></button><div className="memory-callout"><Sparkles size={16}/><p>You learn this topic best after seeing one worked numerical example.</p></div></aside>{modals}</div>
+  return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button onClick={() => setModal('note')} aria-label="New note"><Plus size={15}/></button></div>{data.documents.map((document) => <div className={`tree-row ${document.document_id === selected.document_id ? 'selected' : ''}`} key={document.document_id}><button className="tree-select" onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button><button className="tree-delete" aria-label={`Delete ${document.title}`} onClick={() => setPendingDelete(document)}><Trash2 size={14}/></button></div>)}<button className="tree-ingest" onClick={() => setModal('ingest')}><Upload size={14}/> Add data</button></aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><aside className="context-panel"><span className="panel-eyebrow">Context</span><h3>Connected concepts</h3><button><span>Current Electricity</span><ChevronDown size={14}/></button><button><span>Ohm's Law</span><ChevronDown size={14}/></button><button><span>Kirchhoff's Laws</span><ChevronDown size={14}/></button><div className="memory-callout"><Sparkles size={16}/><p>You learn this topic best after seeing one worked numerical example.</p></div></aside>{modals}</div>
 }
 
 function Planner({ tasks, onMoveTask }) {

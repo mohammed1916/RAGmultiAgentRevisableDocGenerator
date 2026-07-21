@@ -212,6 +212,45 @@ class MilvusRAG:
                 })
         return out
 
+    def delete_profile_chunks(self, profile_id: str, doc_id: Optional[str] = None) -> None:
+        """Delete a profile's ingested chunks, optionally scoped to one doc_id."""
+        if self.mock_mode:
+            self.mock_documents = {
+                key: doc for key, doc in self.mock_documents.items()
+                if not (isinstance(doc, dict) and doc.get("profile_id") == profile_id
+                        and (doc_id is None or doc.get("doc_id") == doc_id))
+            }
+            return
+        if not self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
+            return
+        expr = f'profile_id == "{self._escape_filter_value(profile_id)}"'
+        if doc_id is not None:
+            expr += f' and doc_id == "{self._escape_filter_value(doc_id)}"'
+        try:
+            self.client.delete(collection_name=PROFILE_CHUNKS_COLLECTION, filter=expr)
+        except Exception as e:
+            logger.warning(f"Delete profile chunks failed: {e}")
+
+    def list_profile_chunks(self, profile_id: str, limit: int = 500) -> List[Dict[str, Any]]:
+        """Return a profile's stored chunks (content + identity) for corpus analysis."""
+        if self.mock_mode:
+            return [
+                doc for doc in self.mock_documents.values()
+                if isinstance(doc, dict) and doc.get("profile_id") == profile_id
+            ][:limit]
+        if not self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
+            return []
+        try:
+            return self.client.query(
+                collection_name=PROFILE_CHUNKS_COLLECTION,
+                filter=f'profile_id == "{self._escape_filter_value(profile_id)}"',
+                limit=limit,
+                output_fields=["content", "subject", "chapter", "source", "doc_id"],
+            )
+        except Exception as e:
+            logger.warning(f"List profile chunks failed: {e}")
+            return []
+
     def recreate_collections(self):
         """Drop both collections if they exist and create fresh ones.
 
