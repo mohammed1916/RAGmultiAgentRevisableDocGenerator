@@ -73,8 +73,12 @@ class DocumentChunker:
         Returns:
             List of text chunks
         """
+        if self.overlap >= self.chunk_size:
+            raise ValueError(f"Overlap ({self.overlap}) must be less than chunk_size ({self.chunk_size})")
+
         chunks = []
         start = 0
+        step = max(1, self.chunk_size - self.overlap)
 
         while start < len(text):
             end = min(start + self.chunk_size, len(text))
@@ -83,7 +87,7 @@ class DocumentChunker:
             if chunk:
                 chunks.append(chunk)
 
-            start += self.chunk_size - self.overlap
+            start += step
 
         return chunks
 

@@ -109,7 +109,7 @@ class MarkdownFormatter:
                 asterisks = match.group(0).split(formatted_text)[0]  # Get leading asterisks
 
                 formatting = {}
-                if "**" in asterisks or formatted_text in match.group(0) and match.group(0).count("*") >= 4:
+                if "**" in asterisks or (formatted_text in match.group(0) and match.group(0).count("*") >= 4):
                     # Bold or bold+italic
                     formatting["bold"] = True
                 if "*" in asterisks.replace("**", ""):
