@@ -61,27 +61,17 @@ class MilvusRAG:
         self.client = None
         self.embedding_model = None
         self.embedding_model_name = embedding_model
-        self.mock_mode = False
-        self.mock_documents = {}
 
-        try:
-            self._connect()
-            self._create_collections()
-            # Only load embedding model if Milvus connected successfully
-            self._load_embedding_model()
-        except Exception as e:
-            print(f"Milvus connection failed: {e}. Using mock mode.")
-            self.mock_mode = True
+        # if Milvus or the embedding model is unavailable the caller
+        # decides how to degrade.
+        self._connect()
+        self._create_collections()
+        self._load_embedding_model()
 
     def _load_embedding_model(self):
-        """Lazily load embedding model when needed (not in mock mode)."""
-        if self.embedding_model is None and not self.mock_mode:
-            try:
-                self.embedding_model = SentenceTransformer(self.embedding_model_name)
-            except Exception as e:
-                print(f"Warning: Could not load embedding model: {e}")
-                print("Install with: pip install sentence-transformers")
-                self.mock_mode = True
+        """Load the sentence-transformers embedding model."""
+        if self.embedding_model is None:
+            self.embedding_model = SentenceTransformer(self.embedding_model_name)
 
     def _connect(self):
         """Connect to Milvus server with timeout."""
@@ -150,12 +140,6 @@ class MilvusRAG:
         source: str = "text",
     ) -> None:
         """Embed and store one profile-scoped chunk."""
-        if self.mock_mode:
-            self.mock_documents[doc_id + ":" + content[:16]] = {
-                "content": content, "profile_id": profile_id, "user_id": user_id,
-                "subject": subject, "chapter": chapter, "source": source, "doc_id": doc_id,
-            }
-            return
         self._ensure_profile_collection()
         vector = self._get_embedding(content)
         self.client.insert(
@@ -179,13 +163,6 @@ class MilvusRAG:
         top_k: int = 20,
     ) -> List[Dict[str, Any]]:
         """Vector search restricted to a single profile via exact-match filter."""
-        if self.mock_mode:
-            return [
-                {**doc, "relevance_score": 0.0}
-                for doc in self.mock_documents.values()
-                if isinstance(doc, dict) and doc.get("profile_id") == profile_id
-            ][:top_k]
-
         if not self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
             return []
         query_vector = self._get_embedding(query)
@@ -214,13 +191,6 @@ class MilvusRAG:
 
     def delete_profile_chunks(self, profile_id: str, doc_id: Optional[str] = None) -> None:
         """Delete a profile's ingested chunks, optionally scoped to one doc_id."""
-        if self.mock_mode:
-            self.mock_documents = {
-                key: doc for key, doc in self.mock_documents.items()
-                if not (isinstance(doc, dict) and doc.get("profile_id") == profile_id
-                        and (doc_id is None or doc.get("doc_id") == doc_id))
-            }
-            return
         if not self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
             return
         expr = f'profile_id == "{self._escape_filter_value(profile_id)}"'
@@ -243,11 +213,6 @@ class MilvusRAG:
 
     def list_profile_chunks(self, profile_id: str, limit: int = 500) -> List[Dict[str, Any]]:
         """Return a profile's stored chunks (content + identity) for corpus analysis."""
-        if self.mock_mode:
-            return [
-                doc for doc in self.mock_documents.values()
-                if isinstance(doc, dict) and doc.get("profile_id") == profile_id
-            ][:limit]
         if not self.client.has_collection(PROFILE_CHUNKS_COLLECTION):
             return []
         try:
@@ -264,13 +229,8 @@ class MilvusRAG:
     def recreate_collections(self):
         """Drop both collections if they exist and create fresh ones.
 
-        Used when fully replacing the indexed data (e.g. re-ingesting from
-        source). Requires an active Milvus connection (not mock mode).
+        Used when fully replacing the indexed data (e.g. re-ingesting from source).
         """
-        if self.mock_mode:
-            self.mock_documents = {}
-            return
-
         for class_level, collection_name in self.collection_names.items():
             if self.client.has_collection(collection_name):
                 self.client.drop_collection(collection_name)
@@ -293,14 +253,8 @@ class MilvusRAG:
         Returns:
             384-dimensional semantic embedding vector
         """
-        # Lazily load model if not in mock mode
-        if self.embedding_model is None and not self.mock_mode:
+        if self.embedding_model is None:
             self._load_embedding_model()
-
-        if not self.embedding_model:
-            raise RuntimeError("Embedding model not initialized")
-
-        # Generate embedding
         embedding = self.embedding_model.encode(text, convert_to_numpy=True)
         return embedding.tolist()
 
@@ -326,16 +280,6 @@ class MilvusRAG:
             raise ValueError(f"Invalid class_level: {class_level}. Must be one of {list(self.collection_names.keys())}")
 
         collection_name = self.collection_names[class_level]
-
-        if self.mock_mode:
-            self.mock_documents[doc_id] = {
-                "id": doc_id,
-                "content": content,
-                "document_type": doc_type,
-                "metadata": metadata or {},
-                "class_level": class_level,
-            }
-            return
 
         # Generate real semantic embedding
         vector = self._get_embedding(content)
@@ -413,9 +357,6 @@ class MilvusRAG:
         Returns:
             List of relevant documents with relevance scores from all collections
         """
-        if self.mock_mode:
-            return self._mock_search(query, doc_type, None, top_k)
-
         if not collection_names:
             raise ValueError("No collections specified for search")
 
@@ -461,59 +402,12 @@ class MilvusRAG:
         all_results.sort(key=lambda x: x["relevance_score"], reverse=True)
         return all_results[:top_k]
 
-    def _mock_search(self, query: str, doc_type: str = None, class_level: str = None, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Mock search (keyword matching only).
-
-        Args:
-            query: Search query
-            doc_type: Filter by document type (optional)
-            class_level: Filter by class level (optional)
-            top_k: Number of results
-
-        Returns:
-            Mock search results (keyword-based, not semantic)
-        """
-        query_terms = set(query.lower().split())
-        results = []
-
-        for doc_id, doc in self.mock_documents.items():
-            # Apply doc_type filter if specified
-            if doc_type and doc["document_type"] != doc_type:
-                continue
-
-            # Apply class_level filter if specified
-            if class_level and doc.get("class_level") != class_level:
-                continue
-
-            content = doc["content"].lower()
-            score = sum(1 for term in query_terms if term in content)
-
-            if score > 0:
-                results.append(
-                    {
-                        "doc_id": doc_id,
-                        "content": doc["content"][:500],
-                        "document_type": doc["document_type"],
-                        "metadata": doc.get("metadata", {}),
-                        "class_level": doc.get("class_level", "12"),
-                        "relevance_score": score / len(query_terms) if query_terms else 0,
-                    }
-                )
-
-        results.sort(key=lambda x: x["relevance_score"], reverse=True)
-        return results[:top_k]
-
     def delete_document(self, doc_id: str):
         """Delete document from Milvus.
 
         Args:
             doc_id: Document ID to delete
         """
-        if self.mock_mode:
-            if doc_id in self.mock_documents:
-                del self.mock_documents[doc_id]
-            return
-
         safe_id = self._escape_filter_value(doc_id)
         for collection_name in self.collection_names.values():
             try:
@@ -533,9 +427,6 @@ class MilvusRAG:
         Returns:
             Document data or None
         """
-        if self.mock_mode:
-            return self.mock_documents.get(doc_id)
-
         safe_id = self._escape_filter_value(doc_id)
         for collection_name in self.collection_names.values():
             try:
@@ -568,17 +459,6 @@ class MilvusRAG:
         Returns:
             Collection statistics including per-class breakdown
         """
-        if self.mock_mode:
-            class_10_docs = sum(1 for doc in self.mock_documents.values() if doc.get("class_level") == "10")
-            class_12_docs = sum(1 for doc in self.mock_documents.values() if doc.get("class_level") == "12")
-            return {
-                "mode": "mock",
-                "total_documents": len(self.mock_documents),
-                "class_10_documents": class_10_docs,
-                "class_12_documents": class_12_docs,
-                "indexed": True,
-            }
-
         stats_by_class = {}
         total_docs = 0
 
@@ -608,20 +488,6 @@ class MilvusRAG:
         Returns:
             List of all documents with their metadata and class level
         """
-        if self.mock_mode:
-            result = []
-            for doc_id, doc in self.mock_documents.items():
-                result.append(
-                    {
-                        "doc_id": doc_id,
-                        "content": doc["content"],
-                        "document_type": doc["document_type"],
-                        "metadata": doc.get("metadata", {}),
-                        "class_level": doc.get("class_level", "12"),
-                    }
-                )
-            return result
-
         formatted_results = []
 
         # Query all documents from both collections

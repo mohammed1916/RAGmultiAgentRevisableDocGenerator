@@ -35,7 +35,9 @@ class IngestionService:
         chunk_size: int = 1200,
         chunk_overlap: int = 200,
     ) -> None:
-        self._rag = rag_system or MilvusRAG()
+        # rag_system is injected from the orchestrator; it may be None if the
+        # vector store was unavailable at startup.
+        self._rag = rag_system
         self._reranker = reranker or Reranker()
         self._pdf_chunker = PDFChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         self._text_splitter = RecursiveCharacterTextSplitter(
@@ -46,7 +48,7 @@ class IngestionService:
 
     @property
     def rag_available(self) -> bool:
-        return not getattr(self._rag, "mock_mode", True)
+        return self._rag is not None
 
     # -------------------------------------------------------------- ingestion
 

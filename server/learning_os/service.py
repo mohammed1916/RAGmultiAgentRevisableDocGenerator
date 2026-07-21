@@ -58,7 +58,8 @@ class LearningOSService:
         ingestion: Optional[Any] = None,
     ) -> None:
         self._repo = repository or LearningRepository()
-        # Shared LLM client (optional) used by the knowledge-graph agents.
+        # Shared LLM client used by the tutor and (via the agents) generation.
+        self._llm = llm_client
         self._graph_agent = KnowledgeGraphAgent(llm_client=llm_client)
         # Multi-agent pipeline that derives the graph from ingested corpus data.
         self._graph_pipeline = GraphPipeline(llm_client=llm_client)
@@ -715,6 +716,8 @@ class LearningOSService:
 
     def tutor(self, profile_id: str, user_id: str, question: str) -> Dict[str, Any]:
         self.get_profile(profile_id, user_id)
+        if self._llm is None:
+            raise RuntimeError("LLM is not available")
         sources = self.search(profile_id, user_id, question)[:3]
         context_text = "\n\n".join(f"{item['title']}: {item['excerpt']}" for item in sources)
         prompt = (
@@ -722,23 +725,10 @@ class LearningOSService:
             "If the notes do not contain enough information, say what is missing. Use short sections and one practice prompt.\n\n"
             f"Notes:\n{context_text or 'No matching notes available.'}\n\nQuestion: {question}"
         )
-        base_url = config.ollama.base_url.rstrip("/")
-        try:
-            response = requests.post(
-                f"{base_url}/api/generate",
-                json={"model": config.ollama.model, "prompt": prompt, "stream": False},
-                timeout=45,
-            )
-            response.raise_for_status()
-            answer = response.json().get("response", "").strip()
-            if answer:
-                return {"answer": answer, "sources": sources, "provider": "ollama"}
-        except requests.RequestException as error:
-            logger.warning("Tutor LLM call failed, using local fallback: %s", error)
-        fallback = "I found these profile notes: " + ", ".join(item["title"] for item in sources)
-        if not sources:
-            fallback = "I do not have a matching note in this profile yet. Add a note or ask a more specific question."
-        return {"answer": fallback, "sources": sources, "provider": "local-fallback"}
+        # Uses the shared client, so it respects the active model selection.
+        result = self._llm.generate(prompt)
+        answer = (result.get("response") or "").strip()
+        return {"answer": answer, "sources": sources, "provider": self._llm.mode}
 
     # ------------------------------------------------------------ infra status
 

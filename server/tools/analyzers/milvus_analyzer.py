@@ -340,7 +340,7 @@ class ReportGenerator:
             try:
                 if hasattr(self.rag, 'embedding_model') and self.rag.embedding_model:
                     embedding_model = self.rag.embedding_model
-                elif hasattr(self.rag, 'embedding_model_name') and not self.rag.mock_mode:
+                elif hasattr(self.rag, 'embedding_model_name'):
                     from sentence_transformers import SentenceTransformer
                     embedding_model = SentenceTransformer(self.rag.embedding_model_name)
             except Exception as e:

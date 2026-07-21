@@ -11,6 +11,17 @@ import {
   Send, Sparkles, Target, Trash2, Upload, X, Zap,
 } from 'lucide-react'
 import { api, fileDownloadUrl } from './api'
+import { subscribeToasts, toast } from './toast'
+
+function ToastHost() {
+  const [items, setItems] = useState([])
+  useEffect(() => subscribeToasts((item) => {
+    setItems((list) => [...list, item])
+    setTimeout(() => setItems((list) => list.filter((t) => t.id !== item.id)), 6000)
+  }), [])
+  if (!items.length) return null
+  return <div className="toast-host">{items.map((t) => <div key={t.id} className={`toast ${t.kind}`} role="status"><span>{t.message}</span><button aria-label="Dismiss" onClick={() => setItems((list) => list.filter((x) => x.id !== t.id))}><X size={14}/></button></div>)}</div>
+}
 
 function Modal({ title, onClose, children }) {
   return <div className="modal-backdrop" onClick={onClose}>
@@ -201,7 +212,7 @@ function App() {
 
   const refresh = useCallback(async (profileId = activeId) => {
     if (!profileId) return
-    try { setData(await api.dashboard(profileId)); setError('') } catch (err) { setError(err.message) }
+    try { setData(await api.dashboard(profileId)) } catch (err) { toast(err.message) }
   }, [activeId])
 
   useEffect(() => {
@@ -218,10 +229,10 @@ function App() {
   async function performSearch(event) {
     event.preventDefault()
     if (!query.trim() || !activeId) return
-    setResults(await api.search(activeId, query))
+    try { setResults(await api.search(activeId, query)) } catch (err) { toast(err.message) }
   }
-  async function moveTask(taskId, status) { await api.updateTask(activeId, taskId, status); refresh() }
-  async function review(cardId, rating) { await api.review(activeId, cardId, rating); refresh() }
+  async function moveTask(taskId, status) { try { await api.updateTask(activeId, taskId, status); refresh() } catch (err) { toast(err.message) } }
+  async function review(cardId, rating) { try { await api.review(activeId, cardId, rating); refresh() } catch (err) { toast(err.message) } }
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -241,6 +252,7 @@ function App() {
     </main>
     {showNewProfile && <Modal title="Create a learning profile" onClose={() => setShowNewProfile(false)}><NewProfileForm onCreate={createProfile} onClose={() => setShowNewProfile(false)} /></Modal>}
     {showEditProfile && activeProfile && <Modal title="Edit profile" onClose={() => setShowEditProfile(false)}><EditProfileForm profile={activeProfile} onSave={editProfile} onClose={() => setShowEditProfile(false)} /></Modal>}
+    <ToastHost />
   </div>
 }
 
@@ -657,7 +669,8 @@ function Tutor({ activeId }) {
         setMessages((items) => [...items, { role: 'assistant', content: answer.answer, sources: answer.sources, provider: answer.provider }])
       }
     } catch (err) {
-      setMessages((items) => [...items, { role: 'assistant', content: `Something went wrong: ${err.message}` }])
+      toast(err.message)
+      setMessages((items) => [...items, { role: 'assistant', content: `Request failed: ${err.message}` }])
     } finally { setBusy(false) }
   }
 
