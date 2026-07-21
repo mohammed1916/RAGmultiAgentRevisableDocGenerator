@@ -21,10 +21,17 @@ from .models import (
     LearningProfile,
     LearningProfileCreate,
     ProfilePreferencesUpdate,
+    ProfileUpdate,
     Workspace,
     WorkspaceCreate,
 )
 from .repository import LearningRepository
+
+# Rough per-event study-minute weights used to turn discrete learning events
+# (flashcard reviews, completed tasks) into an activity signal. These are
+# estimates, not tracked wall-clock time.
+_REVIEW_MINUTES = 2
+_TASK_DONE_MINUTES = 25
 
 logger = setup_logger(__name__)
 
@@ -78,6 +85,18 @@ class LearningOSService:
     ) -> LearningProfile:
         profile = self.get_profile(profile_id, user_id)
         profile.preferences.update(request.preferences)
+        profile.updated_at = datetime.now(timezone.utc)
+        self._repo.upsert_entity(
+            "profiles", profile.profile_id, profile.model_dump(mode="json"), user_id=user_id
+        )
+        return profile
+
+    def update_profile(self, profile_id: str, user_id: str, request: ProfileUpdate) -> LearningProfile:
+        """Update editable profile fields (name, learner_name, exam, goal…)."""
+        profile = self.get_profile(profile_id, user_id)
+        changes = request.model_dump(exclude_unset=True)
+        for key, value in changes.items():
+            setattr(profile, key, value)
         profile.updated_at = datetime.now(timezone.utc)
         self._repo.upsert_entity(
             "profiles", profile.profile_id, profile.model_dump(mode="json"), user_id=user_id
@@ -177,6 +196,7 @@ class LearningOSService:
             LearningProfileCreate(
                 user_id=user_id,
                 name="Class 12 Boards",
+                learner_name="Abdullah",
                 exam="CBSE Boards",
                 target_date=date.today() + timedelta(days=154),
                 daily_study_hours=3.5,
@@ -188,6 +208,7 @@ class LearningOSService:
             LearningProfileCreate(
                 user_id=user_id,
                 name="JEE Preparation",
+                learner_name="Abdullah",
                 exam="JEE Main",
                 target_date=date.today() + timedelta(days=206),
                 daily_study_hours=2.0,
@@ -263,7 +284,24 @@ class LearningOSService:
             self._build_and_store_graph(boards.profile_id)
         except Exception as error:
             logger.warning("Demo knowledge-graph build deferred: %s", error)
+        # Seed a couple of weeks of backdated activity so the analytics (which are
+        # now derived, not hardcoded) show a realistic history for the demo.
+        self._seed_demo_events(boards.profile_id, [70, 55, 90, 40, 110, 65, 80, 60, 75, 45, 95, 50, 85, 72])
+        self._seed_demo_events(jee.profile_id, [40, 0, 55, 30, 0, 45, 60, 25, 0, 50, 35, 0, 40, 30])
         return [boards, jee]
+
+    def _seed_demo_events(self, profile_id: str, minutes_by_day_desc: List[int]) -> None:
+        """Create backdated demo events; index 0 is today, 1 is yesterday, etc."""
+        now = datetime.now(timezone.utc)
+        events: List[Dict[str, Any]] = []
+        for offset, minutes in enumerate(minutes_by_day_desc):
+            if minutes <= 0:
+                continue
+            ts = (now - timedelta(days=offset)).replace(hour=18, minute=0, second=0, microsecond=0)
+            events.append({"ts": ts.isoformat(), "kind": "seed", "minutes": minutes})
+        # Store oldest-first for consistency with the live append path.
+        events.reverse()
+        self._repo.set_collection("events", profile_id, events)
 
     # ------------------------------------------------------------- dashboards
 
@@ -275,6 +313,10 @@ class LearningOSService:
         subjects = self._repo.get_collection("subjects", profile_id)
         due_cards = [card for card in cards if card["due"] <= date.today().isoformat()]
         completed = sum(task["status"] == "done" for task in tasks)
+        analytics = self._analytics(profile_id)
+        analytics["tasks_completed"] = completed
+        analytics["task_total"] = len(tasks)
+        analytics["review_due"] = len(due_cards)
         return {
             "profile": profile.model_dump(mode="json"),
             "subjects": subjects,
@@ -282,20 +324,65 @@ class LearningOSService:
             "tasks": tasks,
             "flashcards": due_cards,
             "memories": self._repo.get_collection("memories", profile_id),
-            "analytics": {
-                "study_minutes_this_week": 612 if profile.name == "Class 12 Boards" else 330,
-                "streak": 8 if profile.name == "Class 12 Boards" else 4,
-                "tasks_completed": completed,
-                "task_total": len(tasks),
-                "review_due": len(due_cards),
-                "activity": [
-                    {"day": "Mon", "minutes": 55}, {"day": "Tue", "minutes": 82},
-                    {"day": "Wed", "minutes": 74}, {"day": "Thu", "minutes": 96},
-                    {"day": "Fri", "minutes": 64}, {"day": "Sat", "minutes": 121},
-                    {"day": "Sun", "minutes": 120},
-                ],
-            },
+            "analytics": analytics,
             "graph": self._graph_payload(profile_id),
+        }
+
+    def _analytics(self, profile_id: str) -> Dict[str, Any]:
+        """Derive activity metrics from the profile's real event log.
+
+        All figures come from logged learning events (flashcard reviews,
+        completed tasks); a profile with no activity yet reports zeros rather
+        than fabricated numbers.
+        """
+        events = self._repo.get_collection("events", profile_id)
+        today = date.today()
+
+        # Minutes per calendar day (UTC date of each event).
+        minutes_by_day: Dict[str, int] = {}
+        for event in events:
+            try:
+                day = datetime.fromisoformat(event["ts"]).date()
+            except (KeyError, ValueError):
+                continue
+            minutes_by_day[day.isoformat()] = minutes_by_day.get(day.isoformat(), 0) + int(event.get("minutes", 0))
+
+        def minutes_in_range(start: date, end: date) -> int:
+            return sum(
+                mins for iso, mins in minutes_by_day.items()
+                if start <= date.fromisoformat(iso) <= end
+            )
+
+        # This week = trailing 7 days including today; last week = the 7 before.
+        this_week = minutes_in_range(today - timedelta(days=6), today)
+        last_week = minutes_in_range(today - timedelta(days=13), today - timedelta(days=7))
+        if last_week > 0:
+            trend_percent = round((this_week - last_week) / last_week * 100)
+        else:
+            trend_percent = 100 if this_week > 0 else 0
+
+        # Current streak: consecutive days up to today with any activity.
+        streak = 0
+        cursor = today
+        while minutes_by_day.get(cursor.isoformat(), 0) > 0:
+            streak += 1
+            cursor -= timedelta(days=1)
+
+        # Last 7 days as an ordered activity series for the chart.
+        activity = []
+        for offset in range(6, -1, -1):
+            day = today - timedelta(days=offset)
+            activity.append({
+                "day": day.strftime("%a"),
+                "minutes": minutes_by_day.get(day.isoformat(), 0),
+            })
+
+        return {
+            "study_minutes_this_week": this_week,
+            "study_minutes_last_week": last_week,
+            "trend_percent": trend_percent,
+            "streak": streak,
+            "activity": activity,
         }
 
     def _graph_payload(self, profile_id: str) -> Dict[str, Any]:
@@ -352,8 +439,12 @@ class LearningOSService:
         tasks = self._repo.get_collection("tasks", profile_id)
         for task in tasks:
             if task["id"] == task_id:
+                previous = task.get("status")
                 task["status"] = status
                 self._repo.set_collection("tasks", profile_id, tasks)
+                # Log a study event only on the transition into "done".
+                if status == "done" and previous != "done":
+                    self._log_event(profile_id, "task_done", _TASK_DONE_MINUTES)
                 return task
         raise KeyError("Task not found")
 
@@ -369,8 +460,24 @@ class LearningOSService:
                 card["stability"] = round(card["stability"] + interval * 0.35, 2)
                 card["difficulty"] = round(max(1.0, card["difficulty"] + (0.3 if rating == "again" else -0.15)), 2)
                 self._repo.set_collection("flashcards", profile_id, cards)
+                self._log_event(profile_id, "review", _REVIEW_MINUTES)
                 return card
         raise KeyError("Flashcard not found")
+
+    # ---------------------------------------------------------------- events
+
+    def _log_event(self, profile_id: str, kind: str, minutes: int) -> None:
+        """Append a timestamped learning event to the profile's activity log."""
+        events = self._repo.get_collection("events", profile_id)
+        events.append({
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "kind": kind,
+            "minutes": minutes,
+        })
+        # Bound the log so it cannot grow without limit (keep recent 2000).
+        if len(events) > 2000:
+            events = events[-2000:]
+        self._repo.set_collection("events", profile_id, events)
 
     # ---------------------------------------------------------------- tutor
 

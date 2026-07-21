@@ -19,6 +19,7 @@ export const api = {
   bootstrap: () => request(`/learning/demo?user_id=${userId}`),
   listProfiles: () => request(`/learning/profiles?user_id=${userId}`),
   createProfile: (profile) => request('/learning/profiles', { method: 'POST', body: JSON.stringify({ user_id: userId, ...profile }) }),
+  updateProfile: (profileId, changes) => request(`/learning/profiles/${profileId}?user_id=${userId}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   deleteProfile: (profileId) => request(`/learning/profiles/${profileId}?user_id=${userId}`, { method: 'DELETE' }),
   dashboard: (profileId) => request(`/learning/profiles/${profileId}/dashboard?user_id=${userId}`),
   refreshGraph: (profileId) => request(`/learning/profiles/${profileId}/graph/refresh?user_id=${userId}`, { method: 'POST' }),

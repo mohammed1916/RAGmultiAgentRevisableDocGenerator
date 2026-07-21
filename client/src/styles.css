@@ -51,3 +51,5 @@
 .file-drop span { font-weight: 400; font-size: 12px; }
 .file-drop input { display: none; }
 .file-drop svg { color: #0b93a6; }
+.profile-menu-edit { border-top: 1px solid #3a4d68 !important; margin-top: 4px; color: #cdd9e8 !important; }
+.trend.down { color: #cd554d; }

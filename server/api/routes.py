@@ -32,6 +32,7 @@ from ..learning_os import (
     LearningProfile,
     LearningProfileCreate,
     ProfilePreferencesUpdate,
+    ProfileUpdate,
     FlashcardReview,
     StudyQuestion,
     TaskStatusUpdate,
@@ -324,6 +325,18 @@ async def get_learning_profile(request: Request, profile_id: str, user_id: str) 
     service = _service(request)
     try:
         return await anyio.to_thread.run_sync(service.get_profile, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/learning/profiles/{profile_id}", response_model=LearningProfile)
+async def update_learning_profile(
+    request: Request, profile_id: str, user_id: str, body: ProfileUpdate
+) -> LearningProfile:
+    """Update editable profile fields (name, learner name, exam, target, hours)."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.update_profile, profile_id, user_id, body)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

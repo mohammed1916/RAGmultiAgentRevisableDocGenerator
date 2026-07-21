@@ -74,6 +74,37 @@ function Metric({ label, value, suffix, accent = 'cyan' }) {
   return <article className="metric"><span className={`metric-icon ${accent}`}><Zap size={16} /></span><div><small>{label}</small><strong>{value}<em>{suffix}</em></strong></div></article>
 }
 
+function EditProfileForm({ profile, onSave, onClose }) {
+  const [form, setForm] = useState({
+    name: profile.name || '', learner_name: profile.learner_name || '', exam: profile.exam || '',
+    target_date: profile.target_date || '', daily_study_hours: profile.daily_study_hours ?? 0,
+  })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))
+  async function submit(event) {
+    event.preventDefault()
+    if (busy) return
+    setBusy(true); setError('')
+    try {
+      const changes = { name: form.name, learner_name: form.learner_name || null, exam: form.exam || null, daily_study_hours: Number(form.daily_study_hours) || 0 }
+      if (form.target_date) changes.target_date = form.target_date
+      await onSave(changes)
+    } catch (err) { setError(err.message); setBusy(false) }
+  }
+  return <form className="modal-form" onSubmit={submit}>
+    <label>Your name<input autoFocus value={form.learner_name} onChange={set('learner_name')} placeholder="Shown in your greeting" /></label>
+    <label>Profile name<input value={form.name} onChange={set('name')} required /></label>
+    <label>Exam / goal<input value={form.exam} onChange={set('exam')} placeholder="e.g. CBSE Boards" /></label>
+    <div className="modal-row">
+      <label>Target date<input type="date" value={form.target_date} onChange={set('target_date')} /></label>
+      <label>Hours / day<input type="number" min="0" max="24" step="0.5" value={form.daily_study_hours} onChange={set('daily_study_hours')} /></label>
+    </div>
+    {error && <p className="modal-error">{error}</p>}
+    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="submit" className="primary-action" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+  </form>
+}
+
 function App() {
   const [profiles, setProfiles] = useState([])
   const [activeId, setActiveId] = useState('')
@@ -81,6 +112,7 @@ function App() {
   const [view, setView] = useState('overview')
   const [openProfiles, setOpenProfiles] = useState(false)
   const [showNewProfile, setShowNewProfile] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [infra, setInfra] = useState({ ollama: {}, milvus: {} })
@@ -93,6 +125,14 @@ function App() {
     setActiveId(created.profile_id)
     setShowNewProfile(false)
     setOpenProfiles(false)
+  }
+
+  async function editProfile(changes) {
+    await api.updateProfile(activeId, changes)
+    const items = await api.listProfiles()
+    setProfiles(items)
+    setShowEditProfile(false)
+    refresh()
   }
 
   const refresh = useCallback(async (profileId = activeId) => {
@@ -125,7 +165,7 @@ function App() {
       <button className="profile-switcher" onClick={() => setOpenProfiles(!openProfiles)}>
         <span className="profile-orb">{activeProfile?.name?.slice(0, 1) || 'A'}</span><span><b>{activeProfile?.name || 'Loading profile'}</b><small>{activeProfile?.exam || 'Your study space'}</small></span><ChevronDown size={16} />
       </button>
-      {openProfiles && <div className="profile-menu">{profiles.map((profile) => <button key={profile.profile_id} onClick={() => { setActiveId(profile.profile_id); setOpenProfiles(false) }}><span>{profile.name.slice(0, 1)}</span>{profile.name}</button>)}<button className="profile-menu-add" onClick={() => { setShowNewProfile(true); setOpenProfiles(false) }}><span><Plus size={14} /></span>New profile</button></div>}
+      {openProfiles && <div className="profile-menu">{profiles.map((profile) => <button key={profile.profile_id} onClick={() => { setActiveId(profile.profile_id); setOpenProfiles(false) }}><span>{profile.name.slice(0, 1)}</span>{profile.name}</button>)}<button className="profile-menu-edit" onClick={() => { setShowEditProfile(true); setOpenProfiles(false) }}><span><Command size={13} /></span>Edit current profile</button><button className="profile-menu-add" onClick={() => { setShowNewProfile(true); setOpenProfiles(false) }}><span><Plus size={14} /></span>New profile</button></div>}
       <nav>{navItems.map(([id, label, Icon]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}><Icon size={18} />{label}{id === 'review' && dueCount > 0 && <b className="count">{dueCount}</b>}</button>)}</nav>
       <div className="sidebar-bottom"><div className="goal-box"><Target size={18}/><p>Target date</p><strong>{activeProfile?.target_date || 'Set a goal'}</strong><span>{activeProfile?.daily_study_hours || 0}h/day focus</span></div><StatusPill online={infra.ollama?.available} label={infra.ollama?.available ? 'AI ready' : 'AI offline'} /></div>
     </aside>
@@ -136,11 +176,19 @@ function App() {
       {!data ? <div className="loading"><span className="loader"/>Opening your learning space...</div> : <PageContent view={view} data={data} activeId={activeId} onMoveTask={moveTask} onReview={review} onRefresh={refresh} />}
     </main>
     {showNewProfile && <Modal title="Create a learning profile" onClose={() => setShowNewProfile(false)}><NewProfileForm onCreate={createProfile} onClose={() => setShowNewProfile(false)} /></Modal>}
+    {showEditProfile && activeProfile && <Modal title="Edit profile" onClose={() => setShowEditProfile(false)}><EditProfileForm profile={activeProfile} onSave={editProfile} onClose={() => setShowEditProfile(false)} /></Modal>}
   </div>
 }
 
+function greeting(name) {
+  const hour = new Date().getHours()
+  const part = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  return name ? `${part}, ${name}` : part
+}
+
 function PageContent({ view, data, activeId, onMoveTask, onReview, onRefresh }) {
-  const heading = { overview: ['Good evening, Abdullah', 'Your focus is clear. Keep the next move small and specific.'], roadmap: ['Learning roadmap', 'See prerequisite paths and your current confidence.'], workspace: ['Workspace', 'Write, connect, and retrieve notes without leaving your profile.'], planner: ['Study planner', 'Move work through the day as your plan evolves.'], review: ['Review queue', 'Retrieval practice scheduled for today.'], tutor: ['Study tutor', 'Ask against the notes and concepts in this profile.'] }[view]
+  const learner = data.profile?.learner_name
+  const heading = { overview: [greeting(learner), 'Your focus is clear. Keep the next move small and specific.'], roadmap: ['Learning roadmap', 'See prerequisite paths and your current confidence.'], workspace: ['Workspace', 'Write, connect, and retrieve notes without leaving your profile.'], planner: ['Study planner', 'Move work through the day as your plan evolves.'], review: ['Review queue', 'Retrieval practice scheduled for today.'], tutor: ['Study tutor', 'Ask against the notes and concepts in this profile.'] }[view]
   return <section className="page"><div className="page-heading"><div><h1>{heading[0]}</h1><p>{heading[1]}</p></div>{view === 'overview' && <button className="primary-action" onClick={() => document.querySelector('[data-tutor-input]')?.focus()}><Sparkles size={17}/> Ask Atlas</button>}</div>
     {view === 'overview' && <Overview data={data} />}
     {view === 'roadmap' && <Roadmap graph={data.graph} />}
@@ -154,7 +202,7 @@ function PageContent({ view, data, activeId, onMoveTask, onReview, onRefresh }) 
 function Overview({ data }) {
   const { analytics, subjects, tasks, flashcards } = data
   return <><div className="metrics-grid"><Metric label="Study time" value={`${Math.floor(analytics.study_minutes_this_week / 60)}h ${analytics.study_minutes_this_week % 60}m`} suffix="this week"/><Metric label="Current streak" value={analytics.streak} suffix="days" accent="orange"/><Metric label="Plan progress" value={`${analytics.tasks_completed}/${analytics.task_total}`} suffix="tasks" accent="violet"/><Metric label="Reviews due" value={analytics.review_due} suffix="cards" accent="green"/></div>
-  <div className="overview-grid"><section className="panel activity-panel"><div className="panel-title"><div><h2>Learning rhythm</h2><p>Focused study minutes this week</p></div><span className="trend">+18% <small>vs last week</small></span></div><div className="chart"><ResponsiveContainer width="100%" height={230}><AreaChart data={analytics.activity}><defs><linearGradient id="study-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity=".28"/><stop offset="100%" stopColor="#06b6d4" stopOpacity="0"/></linearGradient></defs><CartesianGrid vertical={false} stroke="#e7edf4"/><XAxis dataKey="day" tickLine={false} axisLine={false}/><YAxis hide/><Tooltip/><Area type="monotone" dataKey="minutes" stroke="#0891b2" strokeWidth={3} fill="url(#study-fill)"/></AreaChart></ResponsiveContainer></div></section><section className="panel focus-panel"><div className="panel-title"><div><h2>Today's focus</h2><p>Move one meaningful task forward</p></div><button aria-label="Open planner"><Play size={17}/></button></div>{tasks.filter((task) => task.status !== 'done').slice(0, 3).map((task) => <div className="focus-task" key={task.id}><span className={`priority ${task.priority}`}/><div><b>{task.title}</b><small>{task.parent} · {task.estimate}</small></div><Clock3 size={16}/></div>)}</section></div>
+  <div className="overview-grid"><section className="panel activity-panel"><div className="panel-title"><div><h2>Learning rhythm</h2><p>Focused study minutes this week</p></div><span className={`trend ${analytics.trend_percent < 0 ? 'down' : ''}`}>{analytics.trend_percent > 0 ? '+' : ''}{analytics.trend_percent ?? 0}% <small>vs last week</small></span></div><div className="chart"><ResponsiveContainer width="100%" height={230}><AreaChart data={analytics.activity}><defs><linearGradient id="study-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#06b6d4" stopOpacity=".28"/><stop offset="100%" stopColor="#06b6d4" stopOpacity="0"/></linearGradient></defs><CartesianGrid vertical={false} stroke="#e7edf4"/><XAxis dataKey="day" tickLine={false} axisLine={false}/><YAxis hide/><Tooltip/><Area type="monotone" dataKey="minutes" stroke="#0891b2" strokeWidth={3} fill="url(#study-fill)"/></AreaChart></ResponsiveContainer></div></section><section className="panel focus-panel"><div className="panel-title"><div><h2>Today's focus</h2><p>Move one meaningful task forward</p></div><button aria-label="Open planner"><Play size={17}/></button></div>{tasks.filter((task) => task.status !== 'done').slice(0, 3).map((task) => <div className="focus-task" key={task.id}><span className={`priority ${task.priority}`}/><div><b>{task.title}</b><small>{task.parent} · {task.estimate}</small></div><Clock3 size={16}/></div>)}</section></div>
   <div className="section-row"><div><h2>Subject mastery</h2><p>Confidence blends recall, practice, and recent review.</p></div><button className="text-button">View analytics <BarChart3 size={15}/></button></div><div className="subject-grid">{subjects.map((subject) => <article className="subject-card" key={subject.name}><div className="subject-title"><span style={{ background: subject.color }}>{subject.name.slice(0, 1)}</span><div><h3>{subject.name}</h3><p>{subject.progress}% syllabus covered</p></div></div><div className="mastery"><div><span>Mastery</span><b>{Math.round(subject.mastery * 100)}%</b></div><div className="progress"><i style={{ width: `${subject.mastery * 100}%`, background: subject.color }}/></div></div></article>)}</div>
   <section className="panel review-strip"><div><span className="panel-eyebrow">Active recall</span><h2>{flashcards.length ? `${flashcards.length} cards are ready for review` : 'Your review queue is clear'}</h2><p>{flashcards.length ? 'A short retrieval session now will keep the current-electricity chain warm.' : 'Your next cards will appear here on their scheduled date.'}</p></div><button className="primary-action"><CircleDot size={17}/> Review now</button></section></>
 }

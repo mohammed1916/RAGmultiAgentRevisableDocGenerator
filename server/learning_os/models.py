@@ -20,6 +20,7 @@ class LearningProfileCreate(BaseModel):
 
     user_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=120)
+    learner_name: Optional[str] = Field(default=None, max_length=120)
     exam: Optional[str] = Field(default=None, max_length=120)
     target_date: Optional[date] = None
     daily_study_hours: float = Field(default=0.0, ge=0.0, le=24.0)
@@ -41,6 +42,18 @@ class ProfilePreferencesUpdate(BaseModel):
     """Partial preference update scoped to the profile owner."""
 
     preferences: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ProfileUpdate(BaseModel):
+    """Editable profile fields (learner/profile CRUD). All optional."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    learner_name: Optional[str] = Field(default=None, max_length=120)
+    exam: Optional[str] = Field(default=None, max_length=120)
+    target_date: Optional[date] = None
+    daily_study_hours: Optional[float] = Field(default=None, ge=0.0, le=24.0)
+    language: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    timezone: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 
 class WorkspaceCreate(BaseModel):
