@@ -369,13 +369,15 @@ class MilvusRAG:
             filter_expr = f'document_type == "{self._escape_filter_value(doc_type)}"'
 
         # Semantic search across specified collections
+        # Use recall_k (2x top_k) per collection to avoid starvation when pooling across multiple collections
+        recall_k = max(top_k * 2, 20)
         all_results = []
         for collection_name in collection_names:
             try:
                 results = self.client.search(
                     collection_name=collection_name,
                     data=[query_vector],
-                    limit=top_k,
+                    limit=recall_k,
                     search_params={"metric_type": "COSINE"},
                     filter=filter_expr,
                     output_fields=["content", "document_type", "metadata"],

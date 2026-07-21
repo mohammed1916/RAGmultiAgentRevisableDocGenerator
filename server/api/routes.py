@@ -44,6 +44,22 @@ from ..learning_os.ingestion import IngestionService
 
 logger = setup_logger(__name__)
 
+CHAT_SESSION_TTL_MINUTES = 30
+
+
+def _cleanup_expired_chat_sessions(state) -> None:
+    """Remove chat sessions older than TTL (avoid unbounded memory growth)."""
+    now = datetime.now()
+    expired = [
+        sid for sid, created in state.chat_session_times.items()
+        if (now - created).total_seconds() > CHAT_SESSION_TTL_MINUTES * 60
+    ]
+    for sid in expired:
+        state.chat_sessions.pop(sid, None)
+        state.chat_session_times.pop(sid, None)
+    if expired:
+        logger.info(f"Cleaned up {len(expired)} expired chat sessions")
+
 
 def _cors_origins() -> list[str]:
     """Return the configured CORS allowlist.
@@ -84,6 +100,7 @@ async def lifespan(app: FastAPI):
     app.state.repository = repository
     app.state.learning_service = LearningOSService(repository=repository, llm_client=llm_client)
     app.state.chat_sessions = {}
+    app.state.chat_session_times = {}
     app.state.ingestion_service = None
 
     # --- Document-generation orchestrators (best-effort) ---
@@ -902,6 +919,8 @@ async def start_chat(request: Request, body: DocumentRequest) -> ChatResponse:
         )
         session_id = str(uuid.uuid4())
         request.app.state.chat_sessions[session_id] = response.context
+        request.app.state.chat_session_times[session_id] = datetime.now()
+        _cleanup_expired_chat_sessions(request.app.state)
         response.session_id = session_id
         return response
     except Exception as error:
@@ -916,6 +935,7 @@ async def answer_question(
     chat_orchestrator = _require(
         getattr(request.app.state, "chat_orchestrator", None), "Chat orchestrator"
     )
+    _cleanup_expired_chat_sessions(request.app.state)
     sessions = request.app.state.chat_sessions
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Chat session not found")
@@ -926,6 +946,7 @@ async def answer_question(
             chat_orchestrator.add_answer, context, question_key, answer
         )
         sessions[session_id] = response.context
+        request.app.state.chat_session_times[session_id] = datetime.now()
         response.session_id = session_id
         return response
     except Exception as error:
