@@ -40,9 +40,11 @@ class PlannerAgent:
     """Generate a hierarchical study plan (task tree) from goal + chapters."""
 
     SYSTEM_PROMPT = (
-        "You are a study planner. Given an exam goal and a list of chapters, produce a "
-        "hierarchical task tree: for each chapter, 1-3 concrete, actionable study tasks "
-        "(revise, practice, mock-test, etc.). "
+        "You are a study planner. Given an exam goal, a list of chapters, and the "
+        "learner's instruction, produce a hierarchical task tree: for each relevant "
+        "chapter, 1-3 concrete, actionable study tasks (revise, practice, mock-test, etc.). "
+        "Follow the learner's instruction closely — it defines the plan's focus, horizon, "
+        "and intensity. "
         'Return ONLY JSON: {"tasks": [{"title": "<task>", "parent": "<chapter or subject>", '
         '"estimate": "<e.g. 45 min>", "priority": "high|medium|low"}]}. '
         "Keep it realistic (at most ~12 tasks) and ordered from foundational to advanced."
@@ -51,13 +53,14 @@ class PlannerAgent:
     def __init__(self, llm):
         self.llm = llm
 
-    def run(self, goal: str, chapters: List[str]) -> List[Dict[str, Any]]:
+    def run(self, goal: str, chapters: List[str], instruction: str = "") -> List[Dict[str, Any]]:
         if self.llm is None:
             raise StudyContentException("No LLM client configured for planner")
         chapter_text = ", ".join(chapters) if chapters else "general syllabus"
+        instruction_text = instruction.strip() or "Balanced plan covering all chapters evenly."
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
-            {"role": "user", "content": f"Goal: {goal}\nChapters: {chapter_text}\n\nReturn the task tree JSON now."},
+            {"role": "user", "content": f"Goal: {goal}\nChapters: {chapter_text}\nInstruction: {instruction_text}\n\nReturn the task tree JSON now."},
         ]
         result = self.llm.chat(messages)
         parsed = _extract_json(result.get("message", {}).get("content", ""))
@@ -96,14 +99,15 @@ class FlashcardAgent:
     def __init__(self, llm):
         self.llm = llm
 
-    def run(self, material: str) -> List[Dict[str, Any]]:
+    def run(self, material: str, instruction: str = "") -> List[Dict[str, Any]]:
         if self.llm is None:
             raise StudyContentException("No LLM client configured for flashcards")
         if not material.strip():
             return []
+        focus = f"\nFocus: {instruction.strip()}" if instruction.strip() else ""
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
-            {"role": "user", "content": f"Study material:\n{material[:6000]}\n\nReturn the cards JSON now."},
+            {"role": "user", "content": f"Study material:\n{material[:6000]}{focus}\n\nReturn the cards JSON now."},
         ]
         result = self.llm.chat(messages)
         parsed = _extract_json(result.get("message", {}).get("content", ""))

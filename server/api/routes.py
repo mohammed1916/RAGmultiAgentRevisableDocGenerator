@@ -341,11 +341,11 @@ async def save_learning_graph(request: Request, profile_id: str, user_id: str, b
 
 
 @app.post("/learning/profiles/{profile_id}/generate/plan")
-async def generate_learning_plan(request: Request, profile_id: str, user_id: str):
-    """Generate a hierarchical study plan from the profile's goal and chapters."""
+async def generate_learning_plan(request: Request, profile_id: str, user_id: str, instruction: str = ""):
+    """Generate a study plan from the profile's goal, chapters, and instruction."""
     service = _service(request)
     try:
-        return await anyio.to_thread.run_sync(service.generate_plan, profile_id, user_id)
+        return await anyio.to_thread.run_sync(service.generate_plan, profile_id, user_id, instruction)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except Exception as error:
@@ -353,15 +353,35 @@ async def generate_learning_plan(request: Request, profile_id: str, user_id: str
 
 
 @app.post("/learning/profiles/{profile_id}/generate/flashcards")
-async def generate_learning_flashcards(request: Request, profile_id: str, user_id: str):
+async def generate_learning_flashcards(request: Request, profile_id: str, user_id: str, instruction: str = ""):
     """Generate flashcards from the profile's notes and ingested material."""
     service = _service(request)
     try:
-        return await anyio.to_thread.run_sync(service.generate_flashcards, profile_id, user_id)
+        return await anyio.to_thread.run_sync(service.generate_flashcards, profile_id, user_id, instruction)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except Exception as error:
         raise _fail(error, "Flashcards could not be generated")
+
+
+@app.get("/learning/profiles/{profile_id}/sources")
+async def list_learning_sources(request: Request, profile_id: str, user_id: str):
+    """List ingested knowledge-base sources (grouped by document)."""
+    service = _service(request)
+    try:
+        return await anyio.to_thread.run_sync(service.list_ingested_sources, profile_id, user_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.delete("/learning/profiles/{profile_id}/sources/{doc_id}", status_code=204)
+async def delete_learning_source(request: Request, profile_id: str, doc_id: str, user_id: str):
+    """Remove one ingested source's chunks from the knowledge base."""
+    service = _service(request)
+    try:
+        await anyio.to_thread.run_sync(service.delete_ingested_source, profile_id, user_id, doc_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.post("/learning/profiles/{profile_id}/generate/subjects")

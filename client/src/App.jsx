@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addEdge, Background, Controls, Handle, MarkerType, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState } from '@xyflow/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -170,6 +170,17 @@ function App() {
   const [results, setResults] = useState([])
   const [infra, setInfra] = useState({ ollama: {}, milvus: {} })
   const [error, setError] = useState('')
+  const searchRef = useRef(null)
+
+  // Dismiss the search-results popover on outside click or Escape.
+  useEffect(() => {
+    if (results.length === 0) return undefined
+    const onClick = (event) => { if (searchRef.current && !searchRef.current.contains(event.target)) setResults([]) }
+    const onKey = (event) => { if (event.key === 'Escape') setResults([]) }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onClick); document.removeEventListener('keydown', onKey) }
+  }, [results.length])
 
   async function createProfile(payload) {
     const created = await api.createProfile(payload)
@@ -223,9 +234,9 @@ function App() {
       <div className="sidebar-bottom"><div className="goal-box"><Target size={18}/><p>Target date</p><strong>{activeProfile?.target_date || 'Set a goal'}</strong><span>{activeProfile?.daily_study_hours || 0}h/day focus</span></div><StatusPill online={infra.ollama?.available} label={infra.ollama?.available ? 'AI ready' : 'AI offline'} /></div>
     </aside>
     <main className="main">
-      <header className="topbar"><button className="mobile-menu"><PanelLeft size={20}/></button><form className="global-search" onSubmit={performSearch}><Search size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this profile"/><kbd><Command size={11}/> K</kbd></form><div className="topbar-right"><ModelSelector /><StatusPill online={infra.milvus?.available} label={infra.milvus?.available ? 'Vector index' : 'Local search'} /><span className="avatar">A</span></div></header>
+      <header className="topbar"><button className="mobile-menu"><PanelLeft size={20}/></button><form className="global-search" ref={searchRef} onSubmit={performSearch}><Search size={17}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search this profile"/><kbd><Command size={11}/> K</kbd></form><div className="topbar-right"><ModelSelector /><StatusPill online={infra.milvus?.available} label={infra.milvus?.available ? 'Vector index' : 'Local search'} /><span className="avatar">A</span></div></header>
       {error && <div className="error-banner">{error}</div>}
-      {results.length > 0 && <section className="search-results"><b>Results in {activeProfile?.name}</b>{results.map((result) => <button key={result.document_id} onClick={() => { setView('workspace'); setResults([]) }}><FileText size={16}/><span>{result.title}<small>{result.subject} / {result.chapter}</small></span><em>{Math.round(result.score * 100)}%</em></button>)}</section>}
+      {results.length > 0 && <section className="search-results" onMouseDown={(event) => event.stopPropagation()}><b>Results in {activeProfile?.name}</b>{results.map((result) => <button key={result.document_id} onClick={() => { setView('workspace'); setResults([]) }}><FileText size={16}/><span>{result.title}<small>{result.subject} / {result.chapter}</small></span><em>{Math.round(result.score * 100)}%</em></button>)}</section>}
       {!data ? <div className="loading"><span className="loader"/>Opening your learning space...</div> : <PageContent view={view} data={data} activeId={activeId} onMoveTask={moveTask} onReview={review} onRefresh={refresh} />}
     </main>
     {showNewProfile && <Modal title="Create a learning profile" onClose={() => setShowNewProfile(false)}><NewProfileForm onCreate={createProfile} onClose={() => setShowNewProfile(false)} /></Modal>}
@@ -424,9 +435,25 @@ function IngestForm({ activeId, onDone, onClose }) {
       <label>Chapter<input value={meta.chapter} onChange={(event) => setMeta((m) => ({ ...m, chapter: event.target.value }))} placeholder="Current Electricity" /></label>
     </div>
     {error && <p className="modal-error">{error}</p>}
-    {result && <p className="modal-ok"><Check size={14} /> Ingested {result.ingested} chunk{result.ingested === 1 ? '' : 's'} into this profile's knowledge base.</p>}
+    {result && <p className="modal-ok"><Check size={14} /> Ingested {result.ingested} chunk{result.ingested === 1 ? '' : 's'}. This content now powers Search, the Tutor, Plan generation, and the Roadmap graph — it appears under "Knowledge base", not as an editable note.</p>}
     <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>{result ? 'Close' : 'Cancel'}</button><button type="submit" className="primary-action" disabled={busy}>{busy ? 'Embedding…' : 'Ingest'}</button></div>
   </form>
+}
+
+function KnowledgeBasePanel({ activeId, refreshKey }) {
+  const [sources, setSources] = useState([])
+  const [pending, setPending] = useState(null)
+  const [bump, setBump] = useState(0)
+  useEffect(() => { api.listSources(activeId).then(setSources).catch(() => setSources([])) }, [activeId, refreshKey, bump])
+  const total = sources.reduce((sum, s) => sum + s.chunks, 0)
+  async function confirmDelete() { await api.deleteSource(activeId, pending.doc_id); setPending(null); setBump((b) => b + 1) }
+  return <aside className="context-panel"><span className="panel-eyebrow">Knowledge base</span><h3>{total ? `${total} chunks embedded` : 'Nothing ingested yet'}</h3>
+    <p className="kb-explain">Ingested data powers <b>Search</b>, the <b>Tutor</b>, <b>Plan</b> generation, and the <b>Roadmap</b> graph. It isn’t shown as an editable note.</p>
+    {sources.length === 0
+      ? <p className="kb-empty">Use “Add data” to upload a PDF or paste text.</p>
+      : sources.map((s) => <div className="kb-source" key={s.doc_id}><FileText size={14}/><div><b>{s.source}</b><small>{[s.subject, s.chapter].filter(Boolean).join(' · ') || 'no tags'} · {s.chunks} chunk{s.chunks === 1 ? '' : 's'}</small></div><button aria-label="Remove source" onClick={() => setPending(s)}><Trash2 size={13}/></button></div>)}
+    {pending && <ConfirmDialog title="Remove from knowledge base" message={`Remove "${pending.source}" (${pending.chunks} chunks)? Search, Tutor and the graph will no longer use it.`} onConfirm={confirmDelete} onClose={() => setPending(null)} />}
+  </aside>
 }
 
 function Workspace({ data, activeId, onRefresh }) {
@@ -436,14 +463,16 @@ function Workspace({ data, activeId, onRefresh }) {
   const [saved, setSaved] = useState(true)
   const [modal, setModal] = useState(null) // 'note' | 'ingest' | null
   const [pendingDelete, setPendingDelete] = useState(null)
+  const [kbKey, setKbKey] = useState(0)     // bump to refresh the knowledge base after ingest
   useEffect(() => { setContent(selected?.content || ''); setSaved(true) }, [selectedId])
-  async function save() { if (!selected) return; await api.saveDocument(selected.document_id, content); setSaved(true); onRefresh() }
-  async function afterCreate(doc) { setModal(null); await onRefresh(); if (doc?.document_id) setSelectedId(doc.document_id) }
+  async function save() { if (!selected) return; await api.saveDocument(selected.document_id, content); setSaved(true); onRefresh(); setKbKey((k) => k + 1) }
+  async function afterCreate(doc) { setModal(null); await onRefresh(); setKbKey((k) => k + 1); if (doc?.document_id) setSelectedId(doc.document_id) }
+  async function afterIngest() { await onRefresh(); setKbKey((k) => k + 1) }
   async function confirmDelete() {
     await api.deleteDocument(pendingDelete.document_id)
     if (pendingDelete.document_id === selectedId) setSelectedId(undefined)
     setPendingDelete(null)
-    await onRefresh()
+    await onRefresh(); setKbKey((k) => k + 1)
   }
 
   const toolbar = <div className="workspace-actions">
@@ -452,31 +481,58 @@ function Workspace({ data, activeId, onRefresh }) {
   </div>
 
   const modals = <>
-    {modal === 'note' && <Modal title="New note (collection)" onClose={() => setModal(null)}><NewDocumentForm activeId={activeId} onCreated={afterCreate} onClose={() => setModal(null)} /></Modal>}
-    {modal === 'ingest' && <Modal title="Add data to knowledge base" onClose={() => setModal(null)}><IngestForm activeId={activeId} onDone={onRefresh} onClose={() => setModal(null)} /></Modal>}
+    {modal === 'note' && <Modal title="New note" onClose={() => setModal(null)}><NewDocumentForm activeId={activeId} onCreated={afterCreate} onClose={() => setModal(null)} /></Modal>}
+    {modal === 'ingest' && <Modal title="Add data to knowledge base" onClose={() => setModal(null)}><IngestForm activeId={activeId} onDone={afterIngest} onClose={() => setModal(null)} /></Modal>}
     {pendingDelete && <ConfirmDialog title="Delete note" message={`Delete "${pendingDelete.title}"? This removes the note and its embedded chunks from the knowledge base. This cannot be undone.`} onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />}
   </>
 
   if (!selected) return <><div className="empty-state"><BookOpen size={28}/><h2>No notes yet</h2><p>Create a note or ingest a PDF to start building this profile's knowledge base.</p>{toolbar}</div>{modals}</>
-  return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button onClick={() => setModal('note')} aria-label="New note"><Plus size={15}/></button></div>{data.documents.map((document) => <div className={`tree-row ${document.document_id === selected.document_id ? 'selected' : ''}`} key={document.document_id}><button className="tree-select" onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button><button className="tree-delete" aria-label={`Delete ${document.title}`} onClick={() => setPendingDelete(document)}><Trash2 size={14}/></button></div>)}<button className="tree-ingest" onClick={() => setModal('ingest')}><Upload size={14}/> Add data</button></aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><aside className="context-panel"><span className="panel-eyebrow">Context</span><h3>Connected concepts</h3><button><span>Current Electricity</span><ChevronDown size={14}/></button><button><span>Ohm's Law</span><ChevronDown size={14}/></button><button><span>Kirchhoff's Laws</span><ChevronDown size={14}/></button><div className="memory-callout"><Sparkles size={16}/><p>You learn this topic best after seeing one worked numerical example.</p></div></aside>{modals}</div>
+  return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button onClick={() => setModal('note')} aria-label="New note"><Plus size={15}/></button></div>{data.documents.map((document) => <div className={`tree-row ${document.document_id === selected.document_id ? 'selected' : ''}`} key={document.document_id}><button className="tree-select" onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button><button className="tree-delete" aria-label={`Delete ${document.title}`} onClick={() => setPendingDelete(document)}><Trash2 size={14}/></button></div>)}<button className="tree-ingest" onClick={() => setModal('ingest')}><Upload size={14}/> Add data</button></aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><KnowledgeBasePanel activeId={activeId} refreshKey={kbKey} />{modals}</div>
+}
+
+const PLAN_PRESETS = [
+  ['Balanced', 'A balanced plan covering all chapters evenly.'],
+  ['Crash revision', 'A short crash revision focused on the most important, high-yield topics only.'],
+  ['Deep mastery', 'A thorough plan that builds deep mastery: theory, worked examples, then practice for each chapter.'],
+  ['Exam sprint', 'A 2-week exam sprint: prioritise weak areas, heavy practice and mock tests.'],
+]
+
+function PlanForm({ onGenerate, onClose }) {
+  const [instruction, setInstruction] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function submit(event) {
+    event.preventDefault(); if (busy) return
+    setBusy(true); setError('')
+    try { await onGenerate(instruction.trim()) } catch (err) { setError(err.message); setBusy(false) }
+  }
+  return <form className="modal-form" onSubmit={submit}>
+    <div className="preset-row">{PLAN_PRESETS.map(([label, text]) => <button type="button" key={label} className={instruction === text ? 'preset on' : 'preset'} onClick={() => setInstruction(text)}>{label}</button>)}</div>
+    <label>What should this plan focus on?<textarea autoFocus rows={3} value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="e.g. 2-week crash revision on weak areas, daily 1 hour, practice-heavy" /></label>
+    <p className="modal-hint">Leave blank for a balanced plan. Your instruction guides the planner agent.</p>
+    {error && <p className="modal-error">{error}</p>}
+    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="submit" className="primary-action" disabled={busy}><Sparkles size={15} className={busy ? 'spinning' : ''}/> {busy ? 'Planning…' : 'Generate plan'}</button></div>
+  </form>
 }
 
 function Planner({ tasks, activeId, onMoveTask, onRefresh }) {
   const columns = [['planned', 'Planned'], ['in_progress', 'In progress'], ['done', 'Done']]
-  const [modal, setModal] = useState(null)   // 'add' | {task} for edit
+  const [modal, setModal] = useState(null)   // 'add' | 'plan' | {task} for edit
   const [pendingDelete, setPendingDelete] = useState(null)
 
   async function addTask(fields) { await api.addTask(activeId, fields); setModal(null); await onRefresh() }
   async function editTask(fields) { await api.editTask(activeId, modal.id, fields); setModal(null); await onRefresh() }
   async function confirmDelete() { await api.deleteTask(activeId, pendingDelete.id); setPendingDelete(null); await onRefresh() }
+  async function genPlan(instruction) { await api.generatePlan(activeId, instruction); setModal(null); await onRefresh() }
 
   const modals = <>
     {modal === 'add' && <Modal title="Add task" onClose={() => setModal(null)}><TaskForm onSave={addTask} onClose={() => setModal(null)} /></Modal>}
-    {modal && modal !== 'add' && <Modal title="Edit task" onClose={() => setModal(null)}><TaskForm task={modal} onSave={editTask} onClose={() => setModal(null)} /></Modal>}
+    {modal === 'plan' && <Modal title="Generate study plan" onClose={() => setModal(null)}><PlanForm onGenerate={genPlan} onClose={() => setModal(null)} /></Modal>}
+    {modal && modal !== 'add' && modal !== 'plan' && <Modal title="Edit task" onClose={() => setModal(null)}><TaskForm task={modal} onSave={editTask} onClose={() => setModal(null)} /></Modal>}
     {pendingDelete && <ConfirmDialog title="Delete task" message={`Delete "${pendingDelete.title}"?`} onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />}
   </>
 
-  return <><div className="generate-bar"><span>{tasks.length ? `${tasks.length} tasks in this plan` : 'No plan yet'}</span><span className="bar-actions"><button className="chip-button" onClick={() => setModal('add')}><Plus size={14}/> Add task</button><GenerateButton label="Generate plan" busyLabel="Planning…" onGenerate={() => api.generatePlan(activeId)} onRefresh={onRefresh} /></span></div>
+  return <><div className="generate-bar"><span>{tasks.length ? `${tasks.length} tasks in this plan` : 'No plan yet'}</span><span className="bar-actions"><button className="chip-button" onClick={() => setModal('add')}><Plus size={14}/> Add task</button><button className="rebuild-button" onClick={() => setModal('plan')}><Sparkles size={14}/> Generate plan</button></span></div>
     {tasks.length === 0 ? <div className="empty-state"><Target size={28}/><h2>No plan yet</h2><p>Generate a study plan from this profile's goal and chapters, or add tasks manually.</p></div>
     : <div className="kanban">{columns.map(([status, label]) => <section key={status} className="kanban-column"><div className="column-title"><span>{label}</span><b>{tasks.filter((task) => task.status === status).length}</b></div>{tasks.filter((task) => task.status === status).map((task) => <article className="task-card" key={task.id}><span className={`priority ${task.priority}`}/><div className="card-tools"><button aria-label="Edit task" onClick={() => setModal(task)}><Pencil size={13}/></button><button aria-label="Delete task" onClick={() => setPendingDelete(task)}><Trash2 size={13}/></button></div><h3>{task.title}</h3><p>{task.parent}</p><footer><span><Clock3 size={14}/>{task.estimate}</span><select value={task.status} onChange={(event) => onMoveTask(task.id, event.target.value)} aria-label={`Move ${task.title}`}><option value="planned">Planned</option><option value="in_progress">In progress</option><option value="done">Done</option></select></footer></article>)}</section>)}</div>}
     {modals}</>
@@ -519,13 +575,34 @@ function CardForm({ card, onSave, onClose }) {
   </form>
 }
 
-function Review({ cards, activeId, onReview, onRefresh }) {
-  const [revealed, setRevealed] = useState(false)
-  const [modal, setModal] = useState(null)   // 'add' | {card}
-  const [pendingDelete, setPendingDelete] = useState(null)
-  const card = cards[0]
-  useEffect(() => setRevealed(false), [card?.id])
+const RATING_INTERVAL = { again: '1d', hard: '2d', good: '5d', easy: '10d' }
 
+function Review({ cards, activeId, onReview, onRefresh }) {
+  // Work from a local snapshot of the due queue so the card doesn't jump when
+  // the dashboard refreshes after a rating. Rebuild only when the set of due
+  // card ids actually changes (e.g. generate/add/delete).
+  const [queue, setQueue] = useState(cards)
+  const [index, setIndex] = useState(0)
+  const [revealed, setRevealed] = useState(false)
+  const [lastRating, setLastRating] = useState(null)   // {rating, interval} after rating
+  const [modal, setModal] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(null)
+
+  const cardIds = cards.map((c) => c.id).join(',')
+  useEffect(() => { setQueue(cards); setIndex(0); setRevealed(false); setLastRating(null) }, [cardIds])
+
+  const card = queue[index]
+
+  async function rate(rating) {
+    if (!card || lastRating) return
+    setLastRating({ rating, interval: RATING_INTERVAL[rating] })
+    // Persist + refresh analytics in the background; do NOT swap the card yet.
+    try { await onReview(card.id, rating) } catch { /* surfaced by app-level error */ }
+  }
+  function next() {
+    setLastRating(null); setRevealed(false)
+    setIndex((i) => i + 1)
+  }
   async function addCard(fields) { await api.addCard(activeId, fields); setModal(null); await onRefresh() }
   async function editCard(fields) { await api.editCard(activeId, modal.id, fields); setModal(null); await onRefresh() }
   async function confirmDelete() { await api.deleteCard(activeId, pendingDelete.id); setPendingDelete(null); await onRefresh() }
@@ -536,10 +613,19 @@ function Review({ cards, activeId, onReview, onRefresh }) {
     {pendingDelete && <ConfirmDialog title="Delete flashcard" message={`Delete this card? "${pendingDelete.front.slice(0, 60)}"`} onConfirm={confirmDelete} onClose={() => setPendingDelete(null)} />}
   </>
 
-  const addBar = <div className="generate-bar"><span>{cards.length ? `${cards.length} due` : 'No cards due'}</span><span className="bar-actions"><button className="chip-button" onClick={() => setModal('add')}><Plus size={14}/> Add card</button><GenerateButton label="Generate flashcards" busyLabel="Writing cards…" onGenerate={() => api.generateFlashcards(activeId)} onRefresh={onRefresh} /></span></div>
+  const addBar = <div className="generate-bar"><span>{queue.length ? `Card ${Math.min(index + 1, queue.length)} of ${queue.length}` : 'No cards due'}</span><span className="bar-actions"><button className="chip-button" onClick={() => setModal('add')}><Plus size={14}/> Add card</button><GenerateButton label="Generate flashcards" busyLabel="Writing cards…" onGenerate={() => api.generateFlashcards(activeId)} onRefresh={onRefresh} /></span></div>
 
-  if (!card) return <>{addBar}<div className="empty-state"><CircleDot size={28}/><h2>No cards due</h2><p>Generate flashcards from this profile's notes, add one manually, or wait for scheduled reviews.</p></div>{modals}</>
-  return <>{addBar}<div className="review-layout"><section className="flashcard"><div className="card-meta"><span>Flashcard</span><span className="card-tools-inline"><button aria-label="Edit card" onClick={() => setModal(card)}><Pencil size={13}/></button><button aria-label="Delete card" onClick={() => setPendingDelete(card)}><Trash2 size={13}/></button></span></div><div className="card-face"><p>{revealed ? card.back : card.front}</p></div>{!revealed ? <button className="reveal" onClick={() => setRevealed(true)}>Show answer <ChevronDown size={17}/></button> : <div className="rating-row">{[['again','Again'],['hard','Hard'],['good','Good'],['easy','Easy']].map(([rating, label]) => <button key={rating} className={rating} onClick={() => onReview(card.id, rating)}><small>{rating === 'again' ? '1d' : rating === 'hard' ? '2d' : rating === 'good' ? '5d' : '10d'}</small>{label}</button>)}</div>}</section><aside className="review-info"><span className="panel-eyebrow">Memory state</span><h3>Designed for retention</h3><p>Each rating updates the next review interval and records the stability of this concept.</p><dl><div><dt>Stability</dt><dd>{card.stability} days</dd></div><div><dt>Difficulty</dt><dd>{card.difficulty}/10</dd></div><div><dt>Reviews</dt><dd>{card.reps}</dd></div></dl></aside></div>{modals}</>
+  // Finished the queue (or empty).
+  if (!card) return <>{addBar}<div className="empty-state"><Check size={28}/><h2>{queue.length ? 'Session complete' : 'No cards due'}</h2><p>{queue.length ? 'You reviewed every due card. New reviews appear on their scheduled dates.' : 'Generate flashcards from this profile’s notes, add one manually, or wait for scheduled reviews.'}</p></div>{modals}</>
+
+  return <>{addBar}<div className="review-layout"><section className="flashcard"><div className="card-meta"><span>Flashcard {index + 1}/{queue.length}</span><span className="card-tools-inline"><button aria-label="Edit card" onClick={() => setModal(card)}><Pencil size={13}/></button><button aria-label="Delete card" onClick={() => setPendingDelete(card)}><Trash2 size={13}/></button></span></div>
+    <div className="card-face"><p>{revealed ? card.back : card.front}</p></div>
+    {lastRating
+      ? <div className="rated-row"><span className="rated-badge"><Check size={15}/> Rated <b>{lastRating.rating}</b> · next in {lastRating.interval}</span><button className="reveal" onClick={next}>{index + 1 < queue.length ? 'Next card' : 'Finish'} <ChevronDown size={16} style={{ transform: 'rotate(-90deg)' }}/></button></div>
+      : !revealed
+        ? <button className="reveal" onClick={() => setRevealed(true)}>Show answer <ChevronDown size={17}/></button>
+        : <div className="rating-row">{[['again','Again'],['hard','Hard'],['good','Good'],['easy','Easy']].map(([rating, label]) => <button key={rating} className={rating} onClick={() => rate(rating)}><small>{RATING_INTERVAL[rating]}</small>{label}</button>)}</div>}
+  </section><aside className="review-info"><span className="panel-eyebrow">Memory state</span><h3>Designed for retention</h3><p>Rate how well you recalled it — that sets the next review interval. Nothing advances until you choose <b>Next card</b>.</p><dl><div><dt>Stability</dt><dd>{card.stability} days</dd></div><div><dt>Difficulty</dt><dd>{card.difficulty}/10</dd></div><div><dt>Reviews</dt><dd>{card.reps}</dd></div></dl></aside></div>{modals}</>
 }
 
 function Tutor({ activeId }) {

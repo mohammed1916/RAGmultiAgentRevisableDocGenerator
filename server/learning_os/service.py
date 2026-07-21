@@ -490,20 +490,55 @@ class LearningOSService:
                     parts.append(content)
         return "\n\n".join(parts)
 
-    def generate_plan(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
-        """Generate and persist a hierarchical study plan from goal + chapters."""
+    def generate_plan(self, profile_id: str, user_id: str, instruction: str = "") -> List[Dict[str, Any]]:
+        """Generate and persist a hierarchical study plan from goal + chapters.
+
+        ``instruction`` is the learner's free-text guidance (focus, horizon,
+        intensity) that shapes the plan.
+        """
         profile = self.get_profile(profile_id, user_id)
         goal = profile.exam or profile.name
-        tasks = self._planner_agent.run(goal, self._profile_chapters(profile_id))
+        tasks = self._planner_agent.run(goal, self._profile_chapters(profile_id), instruction)
         self._repo.set_collection("tasks", profile_id, tasks)
         return tasks
 
-    def generate_flashcards(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
+    def generate_flashcards(self, profile_id: str, user_id: str, instruction: str = "") -> List[Dict[str, Any]]:
         """Generate and persist flashcards from the profile's material."""
         self.get_profile(profile_id, user_id)
-        cards = self._flashcard_agent.run(self._profile_material(profile_id))
+        cards = self._flashcard_agent.run(self._profile_material(profile_id), instruction)
         self._repo.set_collection("flashcards", profile_id, cards)
         return cards
+
+    def list_ingested_sources(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
+        """Group a profile's ingested vector chunks by source document.
+
+        Ingested data lives only in the vector store (it is not a workspace
+        document); this exposes what has been added and how much, so the
+        knowledge base is visible and manageable.
+        """
+        self.get_profile(profile_id, user_id)
+        if self._ingestion is None:
+            return []
+        chunks = self._ingestion.list_corpus(profile_id, limit=2000)
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for chunk in chunks:
+            doc_id = chunk.get("doc_id") or "unknown"
+            entry = grouped.setdefault(doc_id, {
+                "doc_id": doc_id,
+                "source": chunk.get("source") or "text",
+                "subject": chunk.get("subject") or None,
+                "chapter": chunk.get("chapter") or None,
+                "chunks": 0,
+            })
+            entry["chunks"] += 1
+        return sorted(grouped.values(), key=lambda item: item["source"])
+
+    def delete_ingested_source(self, profile_id: str, user_id: str, doc_id: str) -> None:
+        """Remove all chunks of one ingested source from the vector store."""
+        self.get_profile(profile_id, user_id)
+        if self._ingestion is not None:
+            self._ingestion.delete_doc(profile_id, doc_id)
+            self._repo.delete_collection("graph", profile_id)
 
     def generate_subjects(self, profile_id: str, user_id: str) -> List[Dict[str, Any]]:
         """Derive and persist subjects/coverage from the profile's documents."""

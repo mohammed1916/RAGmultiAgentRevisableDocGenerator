@@ -87,3 +87,21 @@
 .card-tools button:hover, .card-tools-inline button:hover { color: #0b8093; background: #eef7f9; }
 .card-tools-inline { display: inline-flex; gap: 2px; margin-left: auto; }
 .subject-title { position: relative; }
+.preset-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.preset { padding: 6px 11px; border: 1px solid #dbe4ed; color: #55677c; background: #fff; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.preset:hover { background: #f4f7fa; }
+.preset.on { color: #0b8093; border-color: #bfe3e8; background: #effbfc; }
+.modal-hint { margin: 0; color: #8290a2; font-size: 11px; }
+.rated-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rated-badge { display: inline-flex; align-items: center; gap: 6px; color: #168a56; font-size: 12px; font-weight: 600; }
+.rated-badge b { text-transform: capitalize; }
+.rated-row .reveal { width: auto; padding: 9px 14px; }
+.kb-explain { margin: 6px 0 12px; color: #6e8294; font-size: 11px; line-height: 1.5; }
+.kb-empty { margin: 0; color: #8290a2; font-size: 11px; }
+.kb-source { display: flex; align-items: center; gap: 8px; padding: 8px; margin-bottom: 6px; border: 1px solid #e1e8ee; border-radius: 5px; background: #fff; }
+.kb-source svg { flex: 0 0 auto; color: #0b93a6; }
+.kb-source > div { flex: 1; min-width: 0; }
+.kb-source b { display: block; color: #2c3a4e; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-source small { display: block; margin-top: 2px; color: #8290a2; font-size: 9px; }
+.kb-source button { display: grid; place-items: center; width: 24px; height: 22px; border: 0; color: #b06a64; background: transparent; border-radius: 4px; }
+.kb-source button:hover { color: #c9463d; background: #fbecea; }

@@ -24,9 +24,11 @@ export const api = {
   dashboard: (profileId) => request(`/learning/profiles/${profileId}/dashboard?user_id=${userId}`),
   refreshGraph: (profileId) => request(`/learning/profiles/${profileId}/graph/refresh?user_id=${userId}`, { method: 'POST' }),
   saveGraph: (profileId, graph) => request(`/learning/profiles/${profileId}/graph?user_id=${userId}`, { method: 'PUT', body: JSON.stringify(graph) }),
-  generatePlan: (profileId) => request(`/learning/profiles/${profileId}/generate/plan?user_id=${userId}`, { method: 'POST' }),
-  generateFlashcards: (profileId) => request(`/learning/profiles/${profileId}/generate/flashcards?user_id=${userId}`, { method: 'POST' }),
+  generatePlan: (profileId, instruction = '') => request(`/learning/profiles/${profileId}/generate/plan?user_id=${userId}&instruction=${encodeURIComponent(instruction)}`, { method: 'POST' }),
+  generateFlashcards: (profileId, instruction = '') => request(`/learning/profiles/${profileId}/generate/flashcards?user_id=${userId}&instruction=${encodeURIComponent(instruction)}`, { method: 'POST' }),
   generateSubjects: (profileId) => request(`/learning/profiles/${profileId}/generate/subjects?user_id=${userId}`, { method: 'POST' }),
+  listSources: (profileId) => request(`/learning/profiles/${profileId}/sources?user_id=${userId}`),
+  deleteSource: (profileId, docId) => request(`/learning/profiles/${profileId}/sources/${docId}?user_id=${userId}`, { method: 'DELETE' }),
   search: (profileId, query) => request(`/learning/profiles/${profileId}/search?user_id=${userId}&q=${encodeURIComponent(query)}`),
   // Collections (workspaces) and documents
   createWorkspace: (profileId, name, description = '') => request('/learning/workspaces', { method: 'POST', body: JSON.stringify({ user_id: userId, profile_id: profileId, name, description }) }),
