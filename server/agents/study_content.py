@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 
 from ..base.exceptions import AgentException
 from ..base.logger import setup_logger
+from ..tools.utils import date_tool
 
 logger = setup_logger(__name__)
 
@@ -53,14 +54,23 @@ class PlannerAgent:
     def __init__(self, llm):
         self.llm = llm
 
-    def run(self, goal: str, chapters: List[str], instruction: str = "") -> List[Dict[str, Any]]:
+    def run(
+        self,
+        goal: str,
+        chapters: List[str],
+        instruction: str = "",
+        deadline: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
         if self.llm is None:
             raise StudyContentException("No LLM client configured for planner")
         chapter_text = ", ".join(chapters) if chapters else "general syllabus"
         instruction_text = instruction.strip() or "Balanced plan covering all chapters evenly."
+        # Ground the model in the real current date (and days-to-deadline if given)
+        # so any date/horizon reasoning is anchored, not guessed.
+        date_block = date_tool.date_context(deadline)
         messages = [
             {"role": "system", "content": self.SYSTEM_PROMPT},
-            {"role": "user", "content": f"Goal: {goal}\nChapters: {chapter_text}\nInstruction: {instruction_text}\n\nReturn the task tree JSON now."},
+            {"role": "user", "content": f"{date_block}\n\nGoal: {goal}\nChapters: {chapter_text}\nInstruction: {instruction_text}\n\nReturn the task tree JSON now."},
         ]
         result = self.llm.chat(messages)
         parsed = _extract_json(result.get("message", {}).get("content", ""))

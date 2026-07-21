@@ -361,11 +361,19 @@ async def save_learning_graph(request: Request, profile_id: str, user_id: str, b
 
 
 @app.post("/learning/profiles/{profile_id}/generate/plan")
-async def generate_learning_plan(request: Request, profile_id: str, user_id: str, instruction: str = ""):
-    """Generate a study plan from the profile's goal, chapters, and instruction."""
+async def generate_learning_plan(
+    request: Request, profile_id: str, user_id: str, instruction: str = "", deadline: str = ""
+):
+    """Generate a study plan from the profile's goal, chapters, and instruction.
+
+    ``deadline`` is an optional target/exam date (e.g. "2026-03-15" or
+    "March 15, 2026"); when supplied the plan is paced against days remaining.
+    """
     service = _service(request)
     try:
-        return await anyio.to_thread.run_sync(service.generate_plan, profile_id, user_id, instruction)
+        return await anyio.to_thread.run_sync(
+            service.generate_plan, profile_id, user_id, instruction, deadline
+        )
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except Exception as error:

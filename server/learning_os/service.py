@@ -491,15 +491,25 @@ class LearningOSService:
                     parts.append(content)
         return "\n\n".join(parts)
 
-    def generate_plan(self, profile_id: str, user_id: str, instruction: str = "") -> List[Dict[str, Any]]:
+    def generate_plan(
+        self,
+        profile_id: str,
+        user_id: str,
+        instruction: str = "",
+        deadline: str = "",
+    ) -> List[Dict[str, Any]]:
         """Generate and persist a hierarchical study plan from goal + chapters.
 
         ``instruction`` is the learner's free-text guidance (focus, horizon,
-        intensity) that shapes the plan.
+        intensity) that shapes the plan. ``deadline`` is an optional exam/target
+        date; when given, it is passed to the planner so the plan is paced
+        against the days remaining from today.
         """
         profile = self.get_profile(profile_id, user_id)
         goal = profile.exam or profile.name
-        tasks = self._planner_agent.run(goal, self._profile_chapters(profile_id), instruction)
+        tasks = self._planner_agent.run(
+            goal, self._profile_chapters(profile_id), instruction, deadline=deadline or None
+        )
         self._repo.set_collection("tasks", profile_id, tasks)
         return tasks
 
