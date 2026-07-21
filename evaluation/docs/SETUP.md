@@ -8,12 +8,13 @@ This evaluation framework measures retrieval performance using **curriculum_gene
 
 Auto-generated from curriculum chunks. **200 queries** distributed as:
 
-| Dimension            | Actual Distribution                                          | Count |
-| -------------------- | ------------------------------------------------------------ | ----- |
-| **Subjects**         | Mathematics, Science, Social Science                         | 3     |
-| **Query Category**   | curriculum-generated (auto-generated from chunks)            | 1     |
-| **Difficulty Level** | Medium (uniform across all queries)                          | 1     |
-| **Total**            | 200 queries                                                  | 200   |
+| Dimension        | Distribution                                      |
+| ---------------- | ------------------------------------------------- |
+| Subjects         | Mathematics, Science, Social Science              |
+| Query Category   | Curriculum-generated (auto-generated from chunks) |
+| Difficulty Level | Medium (all queries)                              |
+| Total Queries    | 200                                               |
+
 
 ### Distribution by Subject
 
