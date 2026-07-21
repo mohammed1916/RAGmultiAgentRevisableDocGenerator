@@ -10,7 +10,7 @@ import {
   FileText, GraduationCap, LayoutDashboard, Network, PanelLeft, Pencil, Play, Plus, RefreshCw, Search,
   Send, Sparkles, Target, Trash2, Upload, X, Zap,
 } from 'lucide-react'
-import { api } from './api'
+import { api, fileDownloadUrl } from './api'
 
 function Modal({ title, onClose, children }) {
   return <div className="modal-backdrop" onClick={onClose}>
@@ -630,10 +630,45 @@ function Review({ cards, activeId, onReview, onRefresh }) {
 
 function Tutor({ activeId }) {
   const [question, setQuestion] = useState('')
-  const [messages, setMessages] = useState([{ role: 'assistant', content: 'Ask about a concept, a note, or what to study next. I will only use the active profile.' }])
+  const [mode, setMode] = useState('answer')   // 'answer' | 'document'
+  const [messages, setMessages] = useState([{ role: 'assistant', content: 'Ask a question for a grounded answer, or switch to **Generate document** to produce a downloadable .docx via the multi-agent pipeline.' }])
   const [busy, setBusy] = useState(false)
-  async function send(event) { event.preventDefault(); if (!question.trim() || busy) return; const prompt = question.trim(); setMessages((items) => [...items, { role: 'user', content: prompt }]); setQuestion(''); setBusy(true); try { const answer = await api.tutor(activeId, prompt); setMessages((items) => [...items, { role: 'assistant', content: answer.answer, sources: answer.sources, provider: answer.provider }]) } finally { setBusy(false) } }
-  return <div className="tutor-layout"><section className="tutor-chat">{messages.map((message, index) => <article className={`chat-message ${message.role}`} key={index}><span>{message.role === 'assistant' ? <Bot size={17}/> : 'A'}</span><div><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>{message.sources?.length > 0 && <div className="sources">{message.sources.map((source) => <small key={source.document_id}><BookOpen size={12}/>{source.title}</small>)}</div>}</div></article>)}{busy && <article className="chat-message assistant"><span><Bot size={17}/></span><div className="typing"><i/><i/><i/></div></article>}<form onSubmit={send}><textarea data-tutor-input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask about your current notes..."/><button type="submit" disabled={busy} aria-label="Send question"><Send size={18}/></button></form></section><aside className="tutor-sidebar"><span className="panel-eyebrow">Grounded context</span><h3>Active profile only</h3><p>Your other profiles are excluded from this conversation and retrieval context.</p><div><BookOpen size={17}/><span>Documents and notes</span></div><div><Network size={17}/><span>Concept graph</span></div><div><CircleDot size={17}/><span>Review history</span></div></aside></div>
+  const [files, setFiles] = useState([])
+
+  useEffect(() => { api.listFiles().then((r) => setFiles(r.files || [])).catch(() => setFiles([])) }, [])
+
+  async function send(event) {
+    event.preventDefault()
+    if (!question.trim() || busy) return
+    const prompt = question.trim()
+    setMessages((items) => [...items, { role: 'user', content: prompt }])
+    setQuestion(''); setBusy(true)
+    try {
+      if (mode === 'document') {
+        const res = await api.generateDocument(prompt, { profile_id: activeId, source: 'tutor' })
+        if (res.success && res.document_filename) {
+          setMessages((items) => [...items, { role: 'assistant', content: 'Your document is ready.', file: res.document_filename }])
+          const r = await api.listFiles(); setFiles(r.files || [])
+        } else {
+          setMessages((items) => [...items, { role: 'assistant', content: `Generation failed: ${res.error || 'unknown error'}` }])
+        }
+      } else {
+        const answer = await api.tutor(activeId, prompt)
+        setMessages((items) => [...items, { role: 'assistant', content: answer.answer, sources: answer.sources, provider: answer.provider }])
+      }
+    } catch (err) {
+      setMessages((items) => [...items, { role: 'assistant', content: `Something went wrong: ${err.message}` }])
+    } finally { setBusy(false) }
+  }
+
+  return <div className="tutor-layout"><section className="tutor-chat">
+    <div className="segmented tutor-mode"><button type="button" className={mode === 'answer' ? 'on' : ''} onClick={() => setMode('answer')}><Bot size={13}/> Answer</button><button type="button" className={mode === 'document' ? 'on' : ''} onClick={() => setMode('document')}><FileText size={13}/> Generate document</button></div>
+    {messages.map((message, index) => <article className={`chat-message ${message.role}`} key={index}><span>{message.role === 'assistant' ? <Bot size={17}/> : 'A'}</span><div><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>{message.file && <a className="doc-download" href={fileDownloadUrl(message.file)} target="_blank" rel="noreferrer"><FileText size={14}/> Download {message.file}</a>}{message.sources?.length > 0 && <div className="sources">{message.sources.map((source) => <small key={source.document_id}><BookOpen size={12}/>{source.title}</small>)}</div>}</div></article>)}
+    {busy && <article className="chat-message assistant"><span><Bot size={17}/></span><div className="typing">{mode === 'document' ? <span className="doc-progress">Planning → writing → reviewing…</span> : <><i/><i/><i/></>}</div></article>}
+    <form onSubmit={send}><textarea data-tutor-input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={mode === 'document' ? 'Describe the document to generate (e.g. "2-page revision note on Current Electricity")' : 'Ask about your current notes...'}/><button type="submit" disabled={busy} aria-label={mode === 'document' ? 'Generate document' : 'Send question'}>{mode === 'document' ? <FileText size={18}/> : <Send size={18}/>}</button></form>
+  </section><aside className="tutor-sidebar"><span className="panel-eyebrow">{mode === 'document' ? 'Multi-agent pipeline' : 'Grounded context'}</span><h3>{mode === 'document' ? 'Plan → Write → Review' : 'Active profile only'}</h3><p>{mode === 'document' ? 'Documents are produced by the LangGraph agents and saved as .docx using the active model.' : 'Your other profiles are excluded from this conversation and retrieval context.'}</p>
+    {files.length > 0 && <div className="files-list"><span className="panel-eyebrow">Recent documents</span>{files.slice(0, 6).map((f) => <a key={f.filename} className="file-item" href={fileDownloadUrl(f.filename)} target="_blank" rel="noreferrer"><FileText size={13}/><span>{f.filename}</span><small>{f.size_mb}MB</small></a>)}</div>}
+  </aside></div>
 }
 
 export default App

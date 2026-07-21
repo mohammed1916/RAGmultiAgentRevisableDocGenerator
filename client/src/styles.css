@@ -2318,4 +2318,15 @@ select:focus-visible {
 .kb-source button:hover {
     color: #c9463d;
     background: #fbecea;
-}
+}.tutor-mode { align-self: flex-start; margin-bottom: 4px; }
+.tutor-mode button { display: inline-flex; align-items: center; gap: 5px; }
+.doc-download { display: inline-flex; align-items: center; gap: 7px; margin-top: 8px; padding: 8px 12px; border: 1px solid #bfe3e8; color: #0b8093; background: #effbfc; border-radius: 5px; font-size: 12px; font-weight: 700; text-decoration: none; }
+.doc-download:hover { background: #e2f6f8; }
+.doc-progress { color: #6e8294; font-size: 11px; font-style: italic; }
+.files-list { margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7edf2; display: flex; flex-direction: column; gap: 6px; }
+.files-list .panel-eyebrow { margin-bottom: 4px; }
+.file-item { display: flex; align-items: center; gap: 7px; padding: 7px 8px; border: 1px solid #e1e8ee; border-radius: 5px; color: #55677c; background: #fff; text-decoration: none; font-size: 10px; }
+.file-item:hover { border-color: #bfe3e8; background: #f7fdfe; }
+.file-item svg { flex: 0 0 auto; color: #0b93a6; }
+.file-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-item small { color: #8290a2; }

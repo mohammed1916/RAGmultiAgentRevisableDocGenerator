@@ -1,6 +1,8 @@
 const baseUrl = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
 const userId = 'demo-user'
 
+export const fileDownloadUrl = (filename) => `${baseUrl}/download/${encodeURIComponent(filename)}`
+
 async function request(path, options = {}) {
   const isForm = options.body instanceof FormData
   // Let the browser set the multipart Content-Type (with boundary) for FormData.
@@ -39,6 +41,9 @@ export const api = {
   updateTask: (profileId, taskId, status) => request(`/learning/profiles/${profileId}/tasks/${taskId}?user_id=${userId}`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   review: (profileId, cardId, rating) => request(`/learning/profiles/${profileId}/flashcards/${cardId}/review?user_id=${userId}`, { method: 'POST', body: JSON.stringify({ rating }) }),
   tutor: (profileId, question) => request(`/learning/profiles/${profileId}/tutor?user_id=${userId}`, { method: 'POST', body: JSON.stringify({ question }) }),
+  // Document generation (multi-agent Plan -> Write -> Review -> DOCX)
+  generateDocument: (prompt, metadata = {}) => request('/agent/langgraph', { method: 'POST', body: JSON.stringify({ request: prompt, metadata }) }),
+  listFiles: () => request('/files'),
   // Knowledge-base ingestion + retrieval
   ingestText: (profileId, fields) => {
     const form = new FormData()

@@ -270,7 +270,9 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
         os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filepath = os.path.join(output_dir, f"document_{timestamp}.docx")
-        filename = generator.save(filepath)
+        saved_path = generator.save(filepath)
+        # /files and /download key off the bare filename, not the full path.
+        filename = os.path.basename(saved_path)
         logger.info(f"[OK] Document generated: {filename}")
 
         return {

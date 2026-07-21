@@ -5,16 +5,19 @@ flowchart TB
 %% ==========================================================
 subgraph CLIENT["Frontend (React)"]
     Profiles["Profiles<br/>Create · Switch · Delete"]
-    Workspace["Workspace<br/>Markdown · DOCX · PDF · Code"]
-    Roadmap["Knowledge Graph / Roadmap"]
-    Planner["Planner · Tutor · Search · Review"]
-    AI["AI Assistant"]
+    Workspace["Workspace<br/>Notes · Knowledge base · Ingest"]
+    Roadmap["Knowledge Graph / Roadmap<br/>edit · rebuild"]
+    Planner["Planner · Search · Review"]
+    Tutor["Tutor (chatbot)<br/>Answer | Generate document"]
+    ModelSel["Model selector<br/>cloud / local"]
 end
 
 API["FastAPI Backend"]
 
-CLIENT -->|REST / WebSocket| API
+CLIENT -->|REST / multipart| API
 API --> CLIENT
+Tutor -->|Generate document| DocAgent
+API -->|.docx download| Tutor
 
 %% ==========================================================
 %% Backend Services
@@ -26,8 +29,10 @@ subgraph BACKEND["Backend Services"]
     Retrieve["Retrieval Service"]
     Rerank["Reranker"]
     Graph["Knowledge Graph Pipeline"]
-    DocAgent["Document Orchestrator (LangGraph)"]
+    Study["Study Content Agents<br/>Planner · Flashcards · Subjects"]
+    DocAgent["Document Orchestrator (LangGraph)<br/>Plan → Write → Review → Refine → DOCX"]
     ChatAgent["Chat Orchestrator"]
+    DocStore["Generated .docx files<br/>/files · /download"]
 
 end
 
@@ -36,8 +41,11 @@ API --> Ingest
 API --> Retrieve
 API --> DocAgent
 API --> ChatAgent
+API --> Study
 
 Retrieve --> Rerank
+DocAgent --> DocStore
+DocStore -->|download| API
 
 %% ==========================================================
 %% PostgreSQL
@@ -106,10 +114,18 @@ end
 DocAgent --> PlannerAgent
 PlannerAgent --> WriterAgent
 WriterAgent --> ReviewerAgent
+ReviewerAgent -->|issues · iterate < 2| WriterAgent
 
 ChatAgent --> ChatLLM
 DocAgent --> TodoAgent
-DocAgent --> TutorAgent
+Retrieve --> TutorAgent
+
+%% Study-content generators: planner tree, flashcards, subjects
+Study --> StudyPlanner["Study Planner Agent"]
+Study --> FlashAgent["Flashcard Agent"]
+StudyPlanner --> MetaDB
+FlashAgent --> MetaDB
+Study -->|subjects - deterministic| MetaDB
 
 Graph --> ConceptAgent
 ConceptAgent --> PrereqAgent
@@ -126,8 +142,8 @@ classDef storage fill:#2f6db018,stroke:#2f6db0,stroke-width:1.5px;
 classDef vector fill:#c9642a18,stroke:#c9642a,stroke-width:1.5px;
 classDef ai fill:#2f9e6b18,stroke:#2f9e6b,stroke-width:1.5px;
 
-class Profiles,Workspace,Roadmap,Planner,AI client;
-class API,WorkspaceSvc,Ingest,Retrieve,Rerank,Graph,DocAgent,ChatAgent,Parse,Chunk,Embed backend;
+class Profiles,Workspace,Roadmap,Planner,Tutor,ModelSel client;
+class API,WorkspaceSvc,Ingest,Retrieve,Rerank,Graph,Study,DocAgent,ChatAgent,DocStore,Parse,Chunk,Embed backend;
 class ProfilesDB,WorkspaceDB,DocsDB,MetaDB storage;
 class Vectors vector;
-class PlannerAgent,WriterAgent,ReviewerAgent,TutorAgent,TodoAgent,ChatLLM,ConceptAgent,PrereqAgent,KnowledgeAgent ai;
+class PlannerAgent,WriterAgent,ReviewerAgent,TutorAgent,TodoAgent,ChatLLM,ConceptAgent,PrereqAgent,KnowledgeAgent,StudyPlanner,FlashAgent ai;
