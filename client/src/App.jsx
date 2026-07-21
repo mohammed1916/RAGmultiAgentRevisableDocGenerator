@@ -7,10 +7,48 @@ import rehypeKatex from 'rehype-katex'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   BarChart3, BookOpen, Bot, Check, ChevronDown, CircleDot, Clock3, Command,
-  FileText, GraduationCap, LayoutDashboard, Network, PanelLeft, Play, Search,
-  Send, Sparkles, Target, Zap,
+  FileText, GraduationCap, LayoutDashboard, Network, PanelLeft, Play, Plus, Search,
+  Send, Sparkles, Target, Upload, X, Zap,
 } from 'lucide-react'
 import { api } from './api'
+
+function Modal({ title, onClose, children }) {
+  return <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal" onClick={(event) => event.stopPropagation()}>
+      <div className="modal-head"><h2>{title}</h2><button className="modal-close" onClick={onClose} aria-label="Close"><X size={18} /></button></div>
+      {children}
+    </div>
+  </div>
+}
+
+function NewProfileForm({ onCreate, onClose }) {
+  const [form, setForm] = useState({ name: '', exam: '', target_date: '', daily_study_hours: 2, timezone: 'Asia/Kolkata' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))
+  async function submit(event) {
+    event.preventDefault()
+    if (!form.name.trim() || busy) return
+    setBusy(true); setError('')
+    try {
+      const payload = { ...form, daily_study_hours: Number(form.daily_study_hours) || 0 }
+      if (!payload.target_date) delete payload.target_date
+      if (!payload.exam) delete payload.exam
+      await onCreate(payload)
+    } catch (err) { setError(err.message); setBusy(false) }
+  }
+  return <form className="modal-form" onSubmit={submit}>
+    <label>Profile name<input autoFocus value={form.name} onChange={set('name')} placeholder="e.g. Class 12 Boards" required /></label>
+    <label>Exam / goal<input value={form.exam} onChange={set('exam')} placeholder="e.g. CBSE Boards, JEE Main" /></label>
+    <div className="modal-row">
+      <label>Target date<input type="date" value={form.target_date} onChange={set('target_date')} /></label>
+      <label>Hours / day<input type="number" min="0" max="24" step="0.5" value={form.daily_study_hours} onChange={set('daily_study_hours')} /></label>
+    </div>
+    <label>Timezone<input value={form.timezone} onChange={set('timezone')} /></label>
+    {error && <p className="modal-error">{error}</p>}
+    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="submit" className="primary-action" disabled={busy}>{busy ? 'Creating…' : 'Create profile'}</button></div>
+  </form>
+}
 
 const navItems = [
   ['overview', 'Overview', LayoutDashboard], ['roadmap', 'Roadmap', Network],
@@ -42,10 +80,20 @@ function App() {
   const [data, setData] = useState(null)
   const [view, setView] = useState('overview')
   const [openProfiles, setOpenProfiles] = useState(false)
+  const [showNewProfile, setShowNewProfile] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [infra, setInfra] = useState({ ollama: {}, milvus: {} })
   const [error, setError] = useState('')
+
+  async function createProfile(payload) {
+    const created = await api.createProfile(payload)
+    const items = await api.listProfiles()
+    setProfiles(items)
+    setActiveId(created.profile_id)
+    setShowNewProfile(false)
+    setOpenProfiles(false)
+  }
 
   const refresh = useCallback(async (profileId = activeId) => {
     if (!profileId) return
@@ -77,7 +125,7 @@ function App() {
       <button className="profile-switcher" onClick={() => setOpenProfiles(!openProfiles)}>
         <span className="profile-orb">{activeProfile?.name?.slice(0, 1) || 'A'}</span><span><b>{activeProfile?.name || 'Loading profile'}</b><small>{activeProfile?.exam || 'Your study space'}</small></span><ChevronDown size={16} />
       </button>
-      {openProfiles && <div className="profile-menu">{profiles.map((profile) => <button key={profile.profile_id} onClick={() => { setActiveId(profile.profile_id); setOpenProfiles(false) }}><span>{profile.name.slice(0, 1)}</span>{profile.name}</button>)}</div>}
+      {openProfiles && <div className="profile-menu">{profiles.map((profile) => <button key={profile.profile_id} onClick={() => { setActiveId(profile.profile_id); setOpenProfiles(false) }}><span>{profile.name.slice(0, 1)}</span>{profile.name}</button>)}<button className="profile-menu-add" onClick={() => { setShowNewProfile(true); setOpenProfiles(false) }}><span><Plus size={14} /></span>New profile</button></div>}
       <nav>{navItems.map(([id, label, Icon]) => <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}><Icon size={18} />{label}{id === 'review' && dueCount > 0 && <b className="count">{dueCount}</b>}</button>)}</nav>
       <div className="sidebar-bottom"><div className="goal-box"><Target size={18}/><p>Target date</p><strong>{activeProfile?.target_date || 'Set a goal'}</strong><span>{activeProfile?.daily_study_hours || 0}h/day focus</span></div><StatusPill online={infra.ollama?.available} label={infra.ollama?.available ? 'AI ready' : 'AI offline'} /></div>
     </aside>
@@ -87,6 +135,7 @@ function App() {
       {results.length > 0 && <section className="search-results"><b>Results in {activeProfile?.name}</b>{results.map((result) => <button key={result.document_id} onClick={() => { setView('workspace'); setResults([]) }}><FileText size={16}/><span>{result.title}<small>{result.subject} / {result.chapter}</small></span><em>{Math.round(result.score * 100)}%</em></button>)}</section>}
       {!data ? <div className="loading"><span className="loader"/>Opening your learning space...</div> : <PageContent view={view} data={data} activeId={activeId} onMoveTask={moveTask} onReview={review} onRefresh={refresh} />}
     </main>
+    {showNewProfile && <Modal title="Create a learning profile" onClose={() => setShowNewProfile(false)}><NewProfileForm onCreate={createProfile} onClose={() => setShowNewProfile(false)} /></Modal>}
   </div>
 }
 
@@ -95,7 +144,7 @@ function PageContent({ view, data, activeId, onMoveTask, onReview, onRefresh }) 
   return <section className="page"><div className="page-heading"><div><h1>{heading[0]}</h1><p>{heading[1]}</p></div>{view === 'overview' && <button className="primary-action" onClick={() => document.querySelector('[data-tutor-input]')?.focus()}><Sparkles size={17}/> Ask Atlas</button>}</div>
     {view === 'overview' && <Overview data={data} />}
     {view === 'roadmap' && <Roadmap graph={data.graph} />}
-    {view === 'workspace' && <Workspace data={data} onRefresh={onRefresh} />}
+    {view === 'workspace' && <Workspace data={data} activeId={activeId} onRefresh={onRefresh} />}
     {view === 'planner' && <Planner tasks={data.tasks} onMoveTask={onMoveTask} />}
     {view === 'review' && <Review cards={data.flashcards} onReview={onReview} />}
     {view === 'tutor' && <Tutor activeId={activeId} />}
@@ -116,15 +165,96 @@ function Roadmap({ graph }) {
   return <><div className="roadmap-toolbar"><span><Network size={17}/> Physics learning path</span><div><button>Auto layout</button><button>Filter weak areas</button></div></div><div className="flow-shell"><ReactFlowProvider><ReactFlow nodes={nodes} edges={edges} nodeTypes={graphTypes} fitView fitViewOptions={{ padding: .2 }}><Background color="#dce6ed" gap={22}/><Controls showInteractive={false}/></ReactFlow></ReactFlowProvider></div><div className="graph-legend"><span><i className="legend complete"/>Strong</span><span><i className="legend active"/>In progress</span><span><i className="legend weak"/>Needs practice</span><p><Sparkles size={15}/> Recommendation: practice Kirchhoff's laws after a short capacitance recall.</p></div></>
 }
 
-function Workspace({ data, onRefresh }) {
+function NewDocumentForm({ activeId, onCreated, onClose }) {
+  const [form, setForm] = useState({ title: '', subject: '', chapter: '', content: '' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }))
+  async function submit(event) {
+    event.preventDefault()
+    if (!form.title.trim() || busy) return
+    setBusy(true); setError('')
+    try {
+      // A document needs a collection (workspace); create one on the fly.
+      const workspace = await api.createWorkspace(activeId, form.title.trim())
+      const doc = await api.createDocument({
+        profile_id: activeId, workspace_id: workspace.workspace_id,
+        title: form.title.trim(), subject: form.subject || null, chapter: form.chapter || null,
+        content: form.content,
+      })
+      await onCreated(doc)
+    } catch (err) { setError(err.message); setBusy(false) }
+  }
+  return <form className="modal-form" onSubmit={submit}>
+    <label>Title<input autoFocus value={form.title} onChange={set('title')} placeholder="e.g. Ohm's law summary" required /></label>
+    <div className="modal-row">
+      <label>Subject<input value={form.subject} onChange={set('subject')} placeholder="Physics" /></label>
+      <label>Chapter<input value={form.chapter} onChange={set('chapter')} placeholder="Current Electricity" /></label>
+    </div>
+    <label>Content (markdown)<textarea rows={6} value={form.content} onChange={set('content')} placeholder="# Notes…" /></label>
+    {error && <p className="modal-error">{error}</p>}
+    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button type="submit" className="primary-action" disabled={busy}>{busy ? 'Creating…' : 'Create note'}</button></div>
+  </form>
+}
+
+function IngestForm({ activeId, onDone, onClose }) {
+  const [mode, setMode] = useState('pdf')
+  const [file, setFile] = useState(null)
+  const [text, setText] = useState('')
+  const [meta, setMeta] = useState({ subject: '', chapter: '' })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState(null)
+  async function submit(event) {
+    event.preventDefault()
+    if (busy) return
+    setBusy(true); setError(''); setResult(null)
+    try {
+      const fields = { subject: meta.subject || null, chapter: meta.chapter || null }
+      const res = mode === 'pdf'
+        ? await api.ingestPdf(activeId, file, fields)
+        : await api.ingestText(activeId, { text, ...fields })
+      setResult(res)
+      onDone?.()
+    } catch (err) { setError(err.message) } finally { setBusy(false) }
+  }
+  return <form className="modal-form" onSubmit={submit}>
+    <div className="segmented"><button type="button" className={mode === 'pdf' ? 'on' : ''} onClick={() => setMode('pdf')}>PDF upload</button><button type="button" className={mode === 'text' ? 'on' : ''} onClick={() => setMode('text')}>Paste text</button></div>
+    {mode === 'pdf'
+      ? <label className="file-drop"><Upload size={18} /><span>{file ? file.name : 'Choose a PDF to add to this profile'}</span><input type="file" accept="application/pdf" onChange={(event) => setFile(event.target.files[0])} required /></label>
+      : <label>Text<textarea rows={7} value={text} onChange={(event) => setText(event.target.value)} placeholder="Paste notes or curriculum text to embed…" required /></label>}
+    <div className="modal-row">
+      <label>Subject<input value={meta.subject} onChange={(event) => setMeta((m) => ({ ...m, subject: event.target.value }))} placeholder="Physics" /></label>
+      <label>Chapter<input value={meta.chapter} onChange={(event) => setMeta((m) => ({ ...m, chapter: event.target.value }))} placeholder="Current Electricity" /></label>
+    </div>
+    {error && <p className="modal-error">{error}</p>}
+    {result && <p className="modal-ok"><Check size={14} /> Ingested {result.ingested} chunk{result.ingested === 1 ? '' : 's'} into this profile's knowledge base.</p>}
+    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>{result ? 'Close' : 'Cancel'}</button><button type="submit" className="primary-action" disabled={busy}>{busy ? 'Embedding…' : 'Ingest'}</button></div>
+  </form>
+}
+
+function Workspace({ data, activeId, onRefresh }) {
   const [selectedId, setSelectedId] = useState(data.documents[0]?.document_id)
   const selected = data.documents.find((document) => document.document_id === selectedId) || data.documents[0]
   const [content, setContent] = useState(selected?.content || '')
   const [saved, setSaved] = useState(true)
+  const [modal, setModal] = useState(null) // 'note' | 'ingest' | null
   useEffect(() => { setContent(selected?.content || ''); setSaved(true) }, [selectedId])
   async function save() { if (!selected) return; await api.saveDocument(selected.document_id, content); setSaved(true); onRefresh() }
-  if (!selected) return <div className="empty-state"><BookOpen size={28}/><h2>No notes yet</h2><p>Create a workspace document to start building your knowledge base.</p></div>
-  return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button>+</button></div>{data.documents.map((document) => <button className={document.document_id === selected.document_id ? 'selected' : ''} key={document.document_id} onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button>)}</aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><aside className="context-panel"><span className="panel-eyebrow">Context</span><h3>Connected concepts</h3><button><span>Current Electricity</span><ChevronDown size={14}/></button><button><span>Ohm's Law</span><ChevronDown size={14}/></button><button><span>Kirchhoff's Laws</span><ChevronDown size={14}/></button><div className="memory-callout"><Sparkles size={16}/><p>You learn this topic best after seeing one worked numerical example.</p></div></aside></div>
+  async function afterCreate(doc) { setModal(null); await onRefresh(); if (doc?.document_id) setSelectedId(doc.document_id) }
+
+  const toolbar = <div className="workspace-actions">
+    <button className="chip-button" onClick={() => setModal('note')}><Plus size={14} /> New note</button>
+    <button className="chip-button" onClick={() => setModal('ingest')}><Upload size={14} /> Add data</button>
+  </div>
+
+  const modals = <>
+    {modal === 'note' && <Modal title="New note (collection)" onClose={() => setModal(null)}><NewDocumentForm activeId={activeId} onCreated={afterCreate} onClose={() => setModal(null)} /></Modal>}
+    {modal === 'ingest' && <Modal title="Add data to knowledge base" onClose={() => setModal(null)}><IngestForm activeId={activeId} onDone={onRefresh} onClose={() => setModal(null)} /></Modal>}
+  </>
+
+  if (!selected) return <><div className="empty-state"><BookOpen size={28}/><h2>No notes yet</h2><p>Create a note or ingest a PDF to start building this profile's knowledge base.</p>{toolbar}</div>{modals}</>
+  return <div className="workspace-layout"><aside className="file-tree"><div className="tree-title"><span>Notes</span><button onClick={() => setModal('note')} aria-label="New note"><Plus size={15}/></button></div>{data.documents.map((document) => <button className={document.document_id === selected.document_id ? 'selected' : ''} key={document.document_id} onClick={() => setSelectedId(document.document_id)}><FileText size={15}/><span>{document.title}</span></button>)}<button className="tree-ingest" onClick={() => setModal('ingest')}><Upload size={14}/> Add data</button></aside><section className="editor-pane"><div className="editor-top"><div><span className="crumb">{selected.subject} / {selected.chapter}</span><h2>{selected.title}</h2></div><div><span className={saved ? 'saved' : 'unsaved'}>{saved ? <><Check size={14}/> Saved</> : 'Unsaved'}</span><button className="save-button" onClick={save}>Save</button></div></div><div className="editor-split"><textarea value={content} onChange={(event) => { setContent(event.target.value); setSaved(false) }} spellCheck="true"/><article className="markdown-preview"><ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>{content}</ReactMarkdown></article></div></section><aside className="context-panel"><span className="panel-eyebrow">Context</span><h3>Connected concepts</h3><button><span>Current Electricity</span><ChevronDown size={14}/></button><button><span>Ohm's Law</span><ChevronDown size={14}/></button><button><span>Kirchhoff's Laws</span><ChevronDown size={14}/></button><div className="memory-callout"><Sparkles size={16}/><p>You learn this topic best after seeing one worked numerical example.</p></div></aside>{modals}</div>
 }
 
 function Planner({ tasks, onMoveTask }) {
