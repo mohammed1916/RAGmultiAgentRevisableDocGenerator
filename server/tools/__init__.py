@@ -16,8 +16,6 @@ from .llm.ollama_client import OllamaClient
 # Utilities
 from .utils.metrics import MetricsCollector
 from .utils.evaluation_metrics import ContentEvaluator
-from .utils.date_utils import DateUtils
-from .utils.progress_extractor import ProgressExtractor
 
 __all__ = [
     # RAG
@@ -33,6 +31,4 @@ __all__ = [
     # Utils
     "MetricsCollector",
     "ContentEvaluator",
-    "DateUtils",
-    "ProgressExtractor",
 ]
