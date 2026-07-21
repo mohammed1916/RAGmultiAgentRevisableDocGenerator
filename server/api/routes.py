@@ -764,7 +764,7 @@ async def ingest_profile_pdf(
     # Persist the upload to a temp file, then ingest and clean up.
     import tempfile
 
-    MAX_PDF_SIZE = 50 * 1024 * 1024
+    MAX_PDF_SIZE = 150 * 1024 * 1024
     data = await file.read()
     if len(data) > MAX_PDF_SIZE:
         raise HTTPException(status_code=413, detail=f"File too large (max {MAX_PDF_SIZE / 1024 / 1024:.0f}MB)")
