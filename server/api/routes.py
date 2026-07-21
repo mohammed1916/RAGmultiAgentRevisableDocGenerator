@@ -45,16 +45,16 @@ from ..learning_os.ingestion import IngestionService
 
 logger = setup_logger(__name__)
 
-CHAT_SESSION_TTL_MINUTES = 30
 MODEL_LOCK = threading.Lock()
 
 
 def _cleanup_expired_chat_sessions(state) -> None:
     """Remove chat sessions older than TTL (avoid unbounded memory growth)."""
     now = datetime.now()
+    ttl_seconds = config.chat_session_ttl_minutes * 60
     expired = [
         sid for sid, created in state.chat_session_times.items()
-        if (now - created).total_seconds() > CHAT_SESSION_TTL_MINUTES * 60
+        if (now - created).total_seconds() > ttl_seconds
     ]
     for sid in expired:
         state.chat_sessions.pop(sid, None)
@@ -764,10 +764,10 @@ async def ingest_profile_pdf(
     # Persist the upload to a temp file, then ingest and clean up.
     import tempfile
 
-    MAX_PDF_SIZE = 150 * 1024 * 1024
     data = await file.read()
-    if len(data) > MAX_PDF_SIZE:
-        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_PDF_SIZE / 1024 / 1024:.0f}MB)")
+    if len(data) > config.max_pdf_upload_bytes:
+        max_mb = config.max_pdf_upload_bytes / 1024 / 1024
+        raise HTTPException(status_code=413, detail=f"File too large (max {max_mb:.0f}MB)")
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -820,7 +820,6 @@ async def ingest_profile_pdfs_bulk(
 
     import tempfile
 
-    MAX_PDF_SIZE = 150 * 1024 * 1024
     results = []
     failed = []
 
@@ -828,10 +827,11 @@ async def ingest_profile_pdfs_bulk(
         tmp_path = None
         try:
             data = await file.read()
-            if len(data) > MAX_PDF_SIZE:
+            if len(data) > config.max_pdf_upload_bytes:
+                max_mb = config.max_pdf_upload_bytes / 1024 / 1024
                 failed.append({
                     "filename": file.filename,
-                    "error": f"File too large (max {MAX_PDF_SIZE / 1024 / 1024:.0f}MB)"
+                    "error": f"File too large (max {max_mb:.0f}MB)"
                 })
                 continue
 

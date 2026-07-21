@@ -9,6 +9,7 @@ import socket
 from typing import List, Dict, Any, Optional
 
 from ...base.logger import setup_logger
+from ...config import config
 
 try:
     from pymilvus import MilvusClient, DataType
@@ -370,7 +371,7 @@ class MilvusRAG:
 
         # Semantic search across specified collections
         # Use recall_k (2x top_k) per collection to avoid starvation when pooling across multiple collections
-        recall_k = max(top_k * 2, 20)
+        recall_k = min(max(top_k * 2, 20), config.max_recall_k)
         all_results = []
         for collection_name in collection_names:
             try:

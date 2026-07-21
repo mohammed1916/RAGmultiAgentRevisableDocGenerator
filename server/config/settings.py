@@ -44,12 +44,37 @@ class AppConfig:
     document_output_dir: str = "output"
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # Upload and processing limits (in bytes)
+    max_pdf_upload_bytes: int = int(os.getenv("MAX_PDF_UPLOAD_MB", "500")) * 1024 * 1024
+    max_chunk_size: int = int(os.getenv("MAX_CHUNK_SIZE", "5000"))
+    min_chunk_size: int = int(os.getenv("MIN_CHUNK_SIZE", "100"))
+    max_chunk_overlap: int = int(os.getenv("MAX_CHUNK_OVERLAP", "2000"))
+
+    # Chat session management
+    chat_session_ttl_minutes: int = int(os.getenv("CHAT_SESSION_TTL_MINUTES", "120"))
+
+    # Retrieval tuning
+    max_recall_k: int = int(os.getenv("MAX_RECALL_K", "100"))
+    max_top_k: int = int(os.getenv("MAX_TOP_K", "50"))
+
     def __post_init__(self):
         if self.ollama is None:
             self.ollama = OllamaConfig()
         if self.langsmith is None:
             self.langsmith = LangSmithConfig()
         os.makedirs(self.document_output_dir, exist_ok=True)
+
+        # Validate chunking config
+        if self.max_chunk_overlap >= self.max_chunk_size:
+            raise ValueError(
+                f"Chunk overlap ({self.max_chunk_overlap}) must be < chunk_size ({self.max_chunk_size})"
+            )
+        if self.min_chunk_size < 10:
+            raise ValueError(f"Minimum chunk size must be >= 10 bytes, got {self.min_chunk_size}")
+        if self.max_chunk_size < self.min_chunk_size:
+            raise ValueError(
+                f"Max chunk size ({self.max_chunk_size}) must be >= min ({self.min_chunk_size})"
+            )
 
 
 # Global config instance

@@ -8,6 +8,7 @@ import re
 from typing import List, Dict, Any
 from pathlib import Path
 from ...base.logger import setup_logger
+from ...config import config
 
 logger = setup_logger(__name__)
 
@@ -15,15 +16,20 @@ logger = setup_logger(__name__)
 class DocumentChunker:
     """Splits documents into chunks for RAG indexing."""
 
-    def __init__(self, chunk_size: int = 500, overlap: int = 100):
+    def __init__(self, chunk_size: int = None, overlap: int = None):
         """Initialize chunker.
 
         Args:
-            chunk_size: Characters per chunk
-            overlap: Character overlap between chunks
+            chunk_size: Characters per chunk (defaults from config)
+            overlap: Character overlap between chunks (defaults from config)
         """
-        self.chunk_size = chunk_size
-        self.overlap = overlap
+        self.chunk_size = chunk_size or config.max_chunk_size
+        self.overlap = overlap or min(config.max_chunk_overlap, self.chunk_size - 1)
+
+        if self.overlap >= self.chunk_size:
+            raise ValueError(
+                f"Overlap ({self.overlap}) must be < chunk_size ({self.chunk_size})"
+            )
 
     def load_json_document(self, filepath: str) -> Dict[str, Any]:
         """Load document from JSON file.
@@ -73,9 +79,6 @@ class DocumentChunker:
         Returns:
             List of text chunks
         """
-        if self.overlap >= self.chunk_size:
-            raise ValueError(f"Overlap ({self.overlap}) must be less than chunk_size ({self.chunk_size})")
-
         chunks = []
         start = 0
         step = max(1, self.chunk_size - self.overlap)

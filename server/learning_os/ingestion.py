@@ -21,6 +21,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from ..base.logger import setup_logger
 from ..tools import MilvusRAG, PDFChunker, Reranker
+from ..config import config
 
 logger = setup_logger(__name__)
 
@@ -32,13 +33,17 @@ class IngestionService:
         self,
         rag_system: Optional[MilvusRAG] = None,
         reranker: Optional[Reranker] = None,
-        chunk_size: int = 1200,
-        chunk_overlap: int = 200,
+        chunk_size: int = None,
+        chunk_overlap: int = None,
     ) -> None:
         # rag_system is injected from the orchestrator; it may be None if the
         # vector store was unavailable at startup.
         self._rag = rag_system
         self._reranker = reranker or Reranker()
+
+        chunk_size = chunk_size or config.max_chunk_size
+        chunk_overlap = chunk_overlap or config.max_chunk_overlap
+
         self._pdf_chunker = PDFChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         self._text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
