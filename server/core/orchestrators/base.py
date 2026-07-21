@@ -2,6 +2,7 @@
 
 import time
 import os
+import uuid
 from datetime import datetime
 from typing import Tuple
 
@@ -138,7 +139,8 @@ class Orchestrator:
 
             # Generate filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"document_{timestamp}.docx"
+            unique_id = str(uuid.uuid4())[:8]
+            filename = f"document_{timestamp}_{unique_id}.docx"
             filepath = os.path.join(config.document_output_dir, filename)
 
             document_path = self.docx_generator.save(filepath)

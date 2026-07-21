@@ -406,12 +406,12 @@ async def search_learning_profile(request: Request, profile_id: str, user_id: st
 
 @app.patch("/learning/documents/{document_id}/content", response_model=LearningDocument)
 async def update_learning_document(
-    request: Request, document_id: str, user_id: str, content: str
+    request: Request, document_id: str, user_id: str, profile_id: str, content: str
 ) -> LearningDocument:
     """Save a document revision in the active profile."""
     service = _service(request)
     try:
-        return await anyio.to_thread.run_sync(service.update_document, document_id, user_id, content)
+        return await anyio.to_thread.run_sync(service.update_document, document_id, user_id, profile_id, content)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -653,21 +653,21 @@ async def create_learning_document(request: Request, body: DocumentCreate) -> Le
 
 
 @app.get("/learning/documents/{document_id}", response_model=LearningDocument)
-async def get_learning_document(request: Request, document_id: str, user_id: str) -> LearningDocument:
-    """Read a document owned by the requesting user."""
+async def get_learning_document(request: Request, document_id: str, user_id: str, profile_id: str) -> LearningDocument:
+    """Read a document owned by the requesting user within the active profile."""
     service = _service(request)
     try:
-        return await anyio.to_thread.run_sync(service.get_document, document_id, user_id)
+        return await anyio.to_thread.run_sync(service.get_document, document_id, user_id, profile_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.delete("/learning/documents/{document_id}", status_code=204)
-async def delete_learning_document(request: Request, document_id: str, user_id: str):
-    """Delete a document and its vector chunks."""
+async def delete_learning_document(request: Request, document_id: str, user_id: str, profile_id: str):
+    """Delete a document and its vector chunks from the active profile."""
     service = _service(request)
     try:
-        await anyio.to_thread.run_sync(service.delete_document, document_id, user_id)
+        await anyio.to_thread.run_sync(service.delete_document, document_id, user_id, profile_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
@@ -744,16 +744,20 @@ async def ingest_profile_pdf(
     # Persist the upload to a temp file, then ingest and clean up.
     import tempfile
 
+    MAX_PDF_SIZE = 50 * 1024 * 1024
     data = await file.read()
+    if len(data) > MAX_PDF_SIZE:
+        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_PDF_SIZE / 1024 / 1024:.0f}MB)")
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             tmp.write(data)
             tmp_path = tmp.name
+        sanitized_source = Path(file.filename).name if file.filename else "pdf"
         return await anyio.to_thread.run_sync(
             lambda: ingestion.ingest_pdf(
                 user_id=user_id, profile_id=profile_id, pdf_path=tmp_path,
-                subject=subject, chapter=chapter, source=file.filename, class_level=class_level,
+                subject=subject, chapter=chapter, source=sanitized_source, class_level=class_level,
             )
         )
     except RuntimeError as error:

@@ -4,6 +4,9 @@ Uses LangGraph StateGraph for complex workflow coordination with state managemen
 conditional routing, and agent node execution.
 """
 
+import uuid
+import os
+from datetime import datetime
 from typing import TypedDict, Optional, List, Annotated
 
 from langgraph.graph import StateGraph, START, END
@@ -269,7 +272,8 @@ async def generate_node(state: DocumentGenerationState) -> DocumentGenerationSta
         output_dir = config.document_output_dir
         os.makedirs(output_dir, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = os.path.join(output_dir, f"document_{timestamp}.docx")
+        unique_id = str(uuid.uuid4())[:8]
+        filepath = os.path.join(output_dir, f"document_{timestamp}_{unique_id}.docx")
         saved_path = generator.save(filepath)
         # /files and /download key off the bare filename, not the full path.
         filename = os.path.basename(saved_path)

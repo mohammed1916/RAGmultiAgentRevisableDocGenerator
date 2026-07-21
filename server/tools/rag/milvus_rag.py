@@ -413,7 +413,7 @@ class MilvusRAG:
             try:
                 self.client.delete(
                     collection_name=collection_name,
-                    filter=f'metadata like "%{safe_id}%"',
+                    filter=f'metadata["doc_id"] == "{safe_id}"',
                 )
             except Exception as e:
                 logger.warning(f"Delete failed in {collection_name}: {e}")
@@ -432,7 +432,7 @@ class MilvusRAG:
             try:
                 results = self.client.query(
                     collection_name=collection_name,
-                    filter=f'metadata like "%{safe_id}%"',
+                    filter=f'metadata["doc_id"] == "{safe_id}"',
                     limit=1,
                     output_fields=["*"],
                 )

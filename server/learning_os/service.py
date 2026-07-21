@@ -199,9 +199,9 @@ class LearningOSService:
         self._embed_note(document)
         return document
 
-    def delete_document(self, document_id: str, user_id: str) -> None:
+    def delete_document(self, document_id: str, user_id: str, profile_id: str) -> None:
         """Delete a document from Postgres and its chunks from the vector store."""
-        document = self.get_document(document_id, user_id)  # raises if not owner
+        document = self.get_document(document_id, user_id, profile_id)  # raises if not owner
         self._repo.delete_entity("documents", document_id)
         if self._ingestion is not None:
             try:
@@ -211,14 +211,14 @@ class LearningOSService:
         # Removing content invalidates the derived graph.
         self._repo.delete_collection("graph", document.profile_id)
 
-    def get_document(self, document_id: str, user_id: str) -> LearningDocument:
+    def get_document(self, document_id: str, user_id: str, profile_id: str) -> LearningDocument:
         data = self._repo.get_entity("documents", document_id)
-        if data is None or data.get("user_id") != user_id:
+        if (data is None or data.get("user_id") != user_id or data.get("profile_id") != profile_id):
             raise KeyError("Document not found")
         return LearningDocument(**data)
 
-    def update_document(self, document_id: str, user_id: str, content: str) -> LearningDocument:
-        document = self.get_document(document_id, user_id)
+    def update_document(self, document_id: str, user_id: str, profile_id: str, content: str) -> LearningDocument:
+        document = self.get_document(document_id, user_id, profile_id)
         document.content = content
         document.version += 1
         document.updated_at = datetime.now(timezone.utc)
